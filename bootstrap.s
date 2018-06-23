@@ -968,12 +968,18 @@ defword "CHAR", 0, CHAR, INTERPRET
 defword ".", 0, DOT, CHAR
   ; Set the V flag. While v is set, we will skip
   ; leading 0s. Once we see a digit which is non-zero, clv.
-  bit SetV
+  bit @setV
   pop
+
+  lda Stack-1, x
+  ora Stack-2, x
+  beq @zero
+
   lda Stack-1, x
   jsr @digit
   lda Stack-2, x
   jsr @digit
+@ending:
   lda #' '
   sta IO_PORT
   rts
@@ -994,12 +1000,16 @@ defword ".", 0, DOT, CHAR
   and #$F
   beq :+
   clv
-: bvs SetV
+: bvs @setV
   tay
   lda HexDigits, y
   sta IO_PORT
-SetV:
-  rts  
+@setV:
+  rts
+@zero:
+  lda #'0'
+  sta IO_PORT
+  jmp @ending  
 
 HexDigits: .byte "0123456789ABCDEF"
 
