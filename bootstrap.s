@@ -639,16 +639,6 @@ defvarzp "DHERE", DHERE_INIT, DHERE, CHERE
 ; ( str-ptr len -- )
 ; Creates a new dictionary entry
 defword "CREATE", 0, CREATE, DHERE
-;  inc DHERE_VALUE
-;  bne @noHi
-;  inc DHERE_VALUE+1 ; increment DHERE
-;@noHi:
-
-;  inc CHERE_VALUE
-;  bne @noHi2
-;  inc CHERE_VALUE+1 ; increment CHERE
-;@noHi2:
-
   ; Set previous pointer
   ldy #(DictEntry::PreviousPtr)
   lda LATEST_VALUE
@@ -663,6 +653,7 @@ defword "CREATE", 0, CREATE, DHERE
   lda DHERE_VALUE+1
   sta LATEST_VALUE+1
 
+  ; Set code pointer to CHERE+2
   ldy #(DictEntry::CodePtr)
   clc
   lda CHERE_VALUE
@@ -671,7 +662,7 @@ defword "CREATE", 0, CREATE, DHERE
   lda CHERE_VALUE+1
   adc #>2
   iny
-  sta (DHERE_VALUE), y ; store the code pointer as DHERE+2
+  sta (DHERE_VALUE), y
   
   lda #0
   lda DHERE_VALUE
@@ -693,13 +684,14 @@ defword "CREATE", 0, CREATE, DHERE
   sta CHERE_VALUE+1 ; add 2 to CHERE
 
   clc
-  lda #<(DictEntry::Len)
+  lda #<(DictEntry::Len+1)
   adc DHERE_VALUE
   sta DHERE_VALUE
-  lda #>(DictEntry::Len)
+  lda #>(DictEntry::Len+1)
   adc DHERE_VALUE+1
   sta DHERE_VALUE+1 ; move DHERE to point after the Len byte.
 
+  DEBUG_START
   ; now we need to copy the name string.
   lda Stack, x ; get length
   tay
@@ -715,6 +707,7 @@ defword "CREATE", 0, CREATE, DHERE
   sta (DHERE_VALUE), y
   dey
   bpl @loop
+  DEBUG_END
 
   clc
   lda Stack, x ; get length
@@ -743,6 +736,7 @@ defword ",", 0, COMMA, CREATE
   lda CHERE_VALUE+1
   adc #>2
   sta CHERE_VALUE+1
+  pop
   rts
 
 defword "C,", 0, CCOMMA, COMMA
@@ -754,6 +748,7 @@ defword "C,", 0, CCOMMA, COMMA
   bne @done
   inc CHERE_VALUE+1
 @done:
+  pop
   rts
 
 defvar "STATE", 0, STATE, CCOMMA
@@ -797,6 +792,8 @@ defword "IMMEDIATE", F_IMMED, IMMEDIATE, SEMICOLON
   sta (LATEST_VALUE), y
   rts
 
+; ( dict-ptr -- )
+; Marks the dictionary entry as hidden
 defword "HIDDEN", 0, HIDDEN, IMMEDIATE
   lda Stack, x
   sta TMP1
@@ -875,7 +872,7 @@ defword "INTERPRET", 0, INTERPRET, QUIT
   sta TMP2
   ldy #(DictEntry::Len)
   lda (TMP1), y
-  and F_IMMED
+  and #F_IMMED
   bne @execute
 
   lda STATE_VALUE
@@ -883,7 +880,15 @@ defword "INTERPRET", 0, INTERPRET, QUIT
 @compiling:
   push JSR_OP
   jsr CCOMMA
-  ; TODO - compiling  
+  
+  ldy #(DictEntry::CodePtr)
+  lda (TMP1), y
+  sta Stack, x
+  iny
+  lda (TMP1), y
+  sta Stack+1, x
+  jsr COMMA
+  rts
 
 @execute:
   pop ; drop dictionary pointer
@@ -919,8 +924,6 @@ defword "INTERPRET", 0, INTERPRET, QUIT
   jsr COMMA ; compile LDA #hi
   push ((STA_ZP_X_OP) | ((Stack+1) << 8))
   jsr COMMA ; compile sta Stack+1, x
-  pop ; drop string length
-  pop ; drop string ptr
   rts
 @executeLiteral:
   rts
@@ -1008,9 +1011,13 @@ defword ".s", 0, DOT_S, DOT
   jmp DOT_S
 @done:
   rts
-  
 
-defword "EXECUTE", 0, EXECUTE, DOT_S
+defword "CR", 0, CR, DOT_S
+  lda #10
+  sta IO_PORT
+  rts
+
+defword "EXECUTE", 0, EXECUTE, CR
   lda Stack, x
   sta TMP1
   lda Stack+1, x
