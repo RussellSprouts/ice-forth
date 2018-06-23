@@ -5,16 +5,29 @@ local ffi = require 'ffi'
 local IO_PORT = 0x401C -- pick a register which is not used on a real NES
 local MEMORY_SIZE = 512 * 1024
 
+local lastLineInput = ''
+
+local trace = false
+
 local m
 m = {
-  a = 0, x = 0, y = 0, sp = 0, ip = -1,
+  a = 0, x = 0, y = 0, sp = 0xFF, ip = -1,
   status = {
     n = 0, v = 0, z = 0, s = 0, c = 0
   },
   memory = ffi.new("unsigned char[?]", MEMORY_SIZE),
   read = function(addr)
-    --print(string.format("read %04x: %02x", addr, m.memory[addr]))
-    return m.memory[addr]
+    if addr == IO_PORT then
+      if lastLineInput:len() == 0 then
+        lastLineInput = io.read("*l") .. '\n'
+      end
+      local result = lastLineInput:byte()
+      lastLineInput = lastLineInput:sub(2)
+      return result
+    else
+      --print(string.format("read %04x: %02x", addr, m.memory[addr]))
+      return m.memory[addr]
+    end
   end,
   set = function(addr, val)
     --print(string.format("set %04x to %02x", addr, val))
@@ -26,6 +39,14 @@ m = {
     else
       m.memory[addr] = bit.band(val, 0xFF)
     end
+  end,
+  pop = function()
+    m.sp = bit.band(m.sp + 1, 0xFF)
+    return m.read(0x100 + m.sp)
+  end,
+  push = function(v)
+    m.set(0x100 + m.sp, v)
+    m.sp = bit.band(m.sp - 1, 0xFF)
   end,
   getAbsolute = function()
     m.ip = m.ip + 2
@@ -49,7 +70,7 @@ m = {
   end,
   storeZeroPageX = function(val)
     m.ip = m.ip + 1
-    return m.store(bit.band(m.read(m.ip) + m.x, 0xFF), val)
+    return m.set(bit.band(m.read(m.ip) + m.x, 0xFF), val)
   end,
   readZeroPageY = function()
     m.ip = m.ip + 1
@@ -57,7 +78,7 @@ m = {
   end,
   storeZeroPageY = function()
     m.ip = m.ip + 1
-    return m.store(bit.band(m.read(m.ip) + m.y, 0xFF), val)
+    return m.set(bit.band(m.read(m.ip) + m.y, 0xFF), val)
   end,
   readAbsolute = function()
     return m.read(m.getAbsolute())
@@ -69,13 +90,13 @@ m = {
     return m.read(m.x + m.getAbsolute())
   end,
   storeAbsoluteX = function(val)
-    return m.store(m.x + m.getAbsolute(), val)
+    return m.set(m.x + m.getAbsolute(), val)
   end,
   readAbsoluteY = function()
     return m.read(m.y + m.getAbsolute())
   end,
   storeAbsoluteY = function(val)
-    return m.store(m.y + m.getAbsolute(), val)
+    return m.set(m.y + m.getAbsolute(), val)
   end,
   readIndirect = function()
     local addr = m.getAbsolute()
@@ -84,7 +105,7 @@ m = {
     if bit.band(addrPlus1, 0xFF) == 0 then
       addrPlus1 = addrPlus1 - 256
     end
-    return m.read(m.read(addr) + m.read(addrPlus1) * 256)
+    return m.read(addr) + m.read(addrPlus1) * 256
   end,
   readIndirectX = function()
     m.ip = m.ip + 1
@@ -96,7 +117,7 @@ m = {
     m.ip = m.ip + 1
     local addr = m.read(m.ip) + m.x
     local addrPlus1 = bit.band(addr + 1, 0xFF)
-    return m.store(m.read(addr) + m.read(addrPlus1) * 256, val)
+    return m.set(m.read(addr) + m.read(addrPlus1) * 256, val)
   end,
   readIndirectY = function()
     m.ip = m.ip + 1
@@ -127,11 +148,18 @@ m = {
   end
 }
 
-local function BIT(addr)
-  local read = m.read(addr)
+local function printStack()
+  io.write(string.format('STACK: sp:%02x ', m.sp))
+  for i = 0xFF, m.sp+1, -1 do
+    io.write(string.format('%02x ', m.memory[0x100 + i]))
+  end
+  io.write('\n')
+end
+
+local function BIT(read)
   m.status.z = bit.band(m.a, read)
-  m.status.n = bit.band(read, 0x80)
-  m.status.v = bit.band(read, 0x40)
+  m.status.n = bit.band(read, 0x80) == 0x80 and 1 or 0
+  m.status.v = bit.band(read, 0x40) == 0x40 and 1 or 0
 end
 
 local function LDA(value)
@@ -226,264 +254,271 @@ end
 
 local opcodes = {
   -- bit
-  [0x24] = function() BIT(m.readZeroPage()) end,
-  [0x2C] = function() BIT(m.readAbsolute()) end,
+  [0x24] = {'BIT ZP', function() BIT(m.readZeroPage()) end},
+  [0x2C] = {'BIT ABS', function() BIT(m.readAbsolute()) end},
   -- lda
-  [0xA9] = function() LDA(m.readImmediate()) end,
-  [0xA5] = function() LDA(m.readZeroPage()) end,
-  [0xB5] = function() LDA(m.readZeroPageX()) end,
-  [0xAD] = function() LDA(m.readAbsolute()) end,
-  [0xBD] = function() LDA(m.readAbsoluteX()) end,
-  [0xB9] = function() LDA(m.readAbsoluteY()) end,
-  [0xA1] = function() LDA(m.readIndirectX()) end,
-  [0xB1] = function() LDA(m.readIndirectY()) end,
+  [0xA9] = {'LDA IMM', function() LDA(m.readImmediate()) end},
+  [0xA5] = {'LDA ZP', function() LDA(m.readZeroPage()) end},
+  [0xB5] = {'LDA ZPX', function() LDA(m.readZeroPageX()) end},
+  [0xAD] = {'LDA ABS', function() LDA(m.readAbsolute()) end},
+  [0xBD] = {'LDA ABSX', function() LDA(m.readAbsoluteX()) end},
+  [0xB9] = {'LDA ABSY', function() LDA(m.readAbsoluteY()) end},
+  [0xA1] = {'LDA INDX', function() LDA(m.readIndirectX()) end},
+  [0xB1] = {'LDA INDY', function() LDA(m.readIndirectY()) end},
   -- sta
-  [0x85] = function() m.storeZeroPage(m.a) end,
-  [0x95] = function() m.storeZeroPageX(m.a) end,
-  [0x8D] = function() m.storeAbsolute(m.a) end,
-  [0x9D] = function() m.storeAbsoluteX(m.a) end,
-  [0x99] = function() m.storeAbsoluteY(m.a) end,
-  [0x81] = function() m.storeIndirectX(m.a) end,
-  [0x91] = function() m.storeIndirectY(m.a) end,
+  [0x85] = {'STA', function() m.storeZeroPage(m.a) end},
+  [0x95] = {'STA', function() m.storeZeroPageX(m.a) end},
+  [0x8D] = {'STA', function() m.storeAbsolute(m.a) end},
+  [0x9D] = {'STA', function() m.storeAbsoluteX(m.a) end},
+  [0x99] = {'STA', function() m.storeAbsoluteY(m.a) end},
+  [0x81] = {'STA', function() m.storeIndirectX(m.a) end},
+  [0x91] = {'STA', function() m.storeIndirectY(m.a) end},
 
   -- ldx
-  [0xA2] = function() LDX(m.readImmediate()) end,
-  [0xA6] = function() LDX(m.readZeroPage()) end,
-  [0xB6] = function() LDX(m.readZeroPageY()) end,
-  [0xAE] = function() LDX(m.readAbsolute()) end,
-  [0xBE] = function() LDX(m.readAbsoluteY()) end,
+  [0xA2] = {'LDX', function() LDX(m.readImmediate()) end},
+  [0xA6] = {'LDX', function() LDX(m.readZeroPage()) end},
+  [0xB6] = {'LDX', function() LDX(m.readZeroPageY()) end},
+  [0xAE] = {'LDX', function() LDX(m.readAbsolute()) end},
+  [0xBE] = {'LDX', function() LDX(m.readAbsoluteY()) end},
   -- stx
-  [0x86] = function() m.storeZeroPage(m.x) end,
-  [0x96] = function() m.storeZeroPageY(m.x) end,
-  [0x8E] = function() m.storeAbsolute(m.x) end,
+  [0x86] = {'STX', function() m.storeZeroPage(m.x) end},
+  [0x96] = {'STX', function() m.storeZeroPageY(m.x) end},
+  [0x8E] = {'STX', function() m.storeAbsolute(m.x) end},
 
   -- ldy
-  [0xA0] = function() LDY(m.readImmediate()) end,
-  [0xA4] = function() LDY(m.readZeroPage()) end,
-  [0xB4] = function() LDY(m.readZeroPageX()) end,
-  [0xAC] = function() LDY(m.readAbsolute()) end,
-  [0xBC] = function() LDY(m.readAbsoluteX()) end,
+  [0xA0] = {'LDY', function() LDY(m.readImmediate()) end},
+  [0xA4] = {'LDY', function() LDY(m.readZeroPage()) end},
+  [0xB4] = {'LDY', function() LDY(m.readZeroPageX()) end},
+  [0xAC] = {'LDY', function() LDY(m.readAbsolute()) end},
+  [0xBC] = {'LDY', function() LDY(m.readAbsoluteX()) end},
   -- sty
-  [0x84] = function() m.storeZeroPage(m.y) end,
-  [0x94] = function() m.storeZeroPageX(m.y) end,
-  [0x8C] = function() m.storeAbsolute(m.y) end,
+  [0x84] = {'STY', function() m.storeZeroPage(m.y) end},
+  [0x94] = {'STY', function() m.storeZeroPageX(m.y) end},
+  [0x8C] = {'STY', function() m.storeAbsolute(m.y) end},
 
   -- tsx/txs
-  [0x9A] = function() m.x = m.sp end,
-  [0xBA] = function() m.sp = m.x end,
+  [0x9A] = {'TSX', function() m.x = m.sp end},
+  [0xBA] = {'TXS', function() m.sp = m.x end},
 
   -- pha/pla
-  [0x48] = function() m.sp = m.sp - 1; m.set(0x100 + m.sp, m.a) end,
-  [0x68] = function() m.a = m.read(0x100 + m.sp); m.sp = m.sp + 1 end,
+  [0x48] = {'PHA', function() m.push(m.a) end},
+  [0x68] = {'PLA', function() m.a = m.pop() end},
 
   -- tax/txa
-  [0xAA] = function() m.x = m.setSZ(m.a) end,
-  [0x8A] = function() m.a = m.setSZ(m.x) end,
+  [0xAA] = {'TAX', function() m.x = m.setSZ(m.a) end},
+  [0x8A] = {'TXA', function() m.a = m.setSZ(m.x) end},
 
   -- dex/inx
-  [0xCA] = function() m.x = m.setSZ(m.x - 1) end,
-  [0xE8] = function() m.x = m.setSZ(m.x + 1) end,
+  [0xCA] = {'DEX', function() m.x = m.setSZ(m.x - 1) end},
+  [0xE8] = {'INX', function() m.x = m.setSZ(m.x + 1) end},
 
   -- tay/tya
-  [0xA8] = function() m.y = m.setSZ(m.a) end,
-  [0x98] = function() m.a = m.setSZ(m.y) end,
+  [0xA8] = {'TAY', function() m.y = m.setSZ(m.a) end},
+  [0x98] = {'TYA', function() m.a = m.setSZ(m.y) end},
 
   -- dey/iny
-  [0x88] = function() m.y = m.setSZ(m.y - 1) end,
-  [0xC8] = function() m.y = m.setSZ(m.y + 1) end,
+  [0x88] = {'DEY', function() m.y = m.setSZ(m.y - 1) end},
+  [0xC8] = {'INY', function() m.y = m.setSZ(m.y + 1) end},
 
   -- nop
-  [0xEA] = function() end,
+  [0xEA] = {'NOP', function() end},
 
   -- inc
-  [0xE6] = function() INC(m.readImmediate()) end,
-  [0xF6] = function() INC(bit.band(m.readImmediate() + m.x), 0xFF) end,
-  [0xEE] = function() INC(m.getAbsolute()) end,
-  [0xFE] = function() INC(m.getAbsolute() + m.x) end,
+  [0xE6] = {'INC', function() INC(m.readImmediate()) end},
+  [0xF6] = {'INC', function() INC(bit.band(m.readImmediate() + m.x), 0xFF) end},
+  [0xEE] = {'INC', function() INC(m.getAbsolute()) end},
+  [0xFE] = {'INC', function() INC(m.getAbsolute() + m.x) end},
 
   -- dec
-  [0xC6] = function() DEC(m.readImmediate()) end,
-  [0xD6] = function() DEC(bit.band(m.readImmediate() + m.x), 0xFF) end,
-  [0xCE] = function() DEC(m.getAbsolute()) end,
-  [0xDE] = function() DEC(m.getAbsolute() + m.x) end,
+  [0xC6] = {'DEC', function() DEC(m.readImmediate()) end},
+  [0xD6] = {'DEC', function() DEC(bit.band(m.readImmediate() + m.x), 0xFF) end},
+  [0xCE] = {'DEC', function() DEC(m.getAbsolute()) end},
+  [0xDE] = {'DEC', function() DEC(m.getAbsolute() + m.x) end},
 
   -- jmp
-  [0x4C] = function() m.ip = m.getAbsolute() - 1 end,
-  [0x6C] = function() m.ip = m.readIndirect() - 1 end,
+  [0x4C] = {'JMP', function() m.ip = m.getAbsolute() - 1 end},
+  [0x6C] = {'JMPI', function() m.ip = m.readIndirect() - 1 end},
 
   -- flag instructions
-  [0x18] = function() m.status.c = 0 end,
-  [0x38] = function() m.status.c = 1 end,
-  [0x58] = function() m.status.i = 0 end,
-  [0x78] = function() m.status.i = 1 end,
-  [0xB8] = function() m.status.v = 0 end,
-  [0xD8] = function() m.status.c = 0 end,
-  [0xF8] = function() m.status.c = 1 end,
+  [0x18] = {'CLC', function() m.status.c = 0 end},
+  [0x38] = {'SEC', function() m.status.c = 1 end},
+  [0x58] = {'CLI', function() m.status.i = 0 end},
+  [0x78] = {'SEI', function() m.status.i = 1 end},
+  [0xB8] = {'CLV', function() m.status.v = 0 end},
+  [0xD8] = {'CLC', function() m.status.c = 0 end},
+  [0xF8] = {'SEC', function() m.status.c = 1 end},
 
   -- and
-  [0x29] = function() AND(m.readImmediate()) end,
-  [0x25] = function() AND(m.readZeroPage()) end,
-  [0x35] = function() AND(m.readZeroPageX()) end,
-  [0x2D] = function() AND(m.readAbsolute()) end,
-  [0x3D] = function() AND(m.readAbsoluteX()) end,
-  [0x39] = function() AND(m.readAbsoluteY()) end,
-  [0x21] = function() AND(m.readIndirectX()) end,
-  [0x31] = function() AND(m.readIndirectY()) end,
+  [0x29] = {'AND', function() AND(m.readImmediate()) end},
+  [0x25] = {'AND', function() AND(m.readZeroPage()) end},
+  [0x35] = {'AND', function() AND(m.readZeroPageX()) end},
+  [0x2D] = {'AND', function() AND(m.readAbsolute()) end},
+  [0x3D] = {'AND', function() AND(m.readAbsoluteX()) end},
+  [0x39] = {'AND', function() AND(m.readAbsoluteY()) end},
+  [0x21] = {'AND', function() AND(m.readIndirectX()) end},
+  [0x31] = {'AND', function() AND(m.readIndirectY()) end},
 
   -- ora
-  [0x09] = function() ORA(m.readImmediate()) end,
-  [0x05] = function() ORA(m.readZeroPage()) end,
-  [0x15] = function() ORA(m.readZeroPageX()) end,
-  [0x0D] = function() ORA(m.readAbsolute()) end,
-  [0x1D] = function() ORA(m.readAbsoluteX()) end,
-  [0x19] = function() ORA(m.readAbsoluteY()) end,
-  [0x01] = function() ORA(m.readIndirectX()) end,
-  [0x11] = function() ORA(m.readIndirectY()) end,
+  [0x09] = {'ORA', function() ORA(m.readImmediate()) end},
+  [0x05] = {'ORA', function() ORA(m.readZeroPage()) end},
+  [0x15] = {'ORA', function() ORA(m.readZeroPageX()) end},
+  [0x0D] = {'ORA', function() ORA(m.readAbsolute()) end},
+  [0x1D] = {'ORA', function() ORA(m.readAbsoluteX()) end},
+  [0x19] = {'ORA', function() ORA(m.readAbsoluteY()) end},
+  [0x01] = {'ORA', function() ORA(m.readIndirectX()) end},
+  [0x11] = {'ORA', function() ORA(m.readIndirectY()) end},
 
   -- eor
-  [0x49] = function() ORA(m.readImmediate()) end,
-  [0x45] = function() ORA(m.readZeroPage()) end,
-  [0x55] = function() ORA(m.readZeroPageX()) end,
-  [0x4D] = function() ORA(m.readAbsolute()) end,
-  [0x5D] = function() ORA(m.readAbsoluteX()) end,
-  [0x59] = function() ORA(m.readAbsoluteY()) end,
-  [0x41] = function() ORA(m.readIndirectX()) end,
-  [0x51] = function() ORA(m.readIndirectY()) end,
+  [0x49] = {'EOR', function() ORA(m.readImmediate()) end},
+  [0x45] = {'EOR', function() ORA(m.readZeroPage()) end},
+  [0x55] = {'EOR', function() ORA(m.readZeroPageX()) end},
+  [0x4D] = {'EOR', function() ORA(m.readAbsolute()) end},
+  [0x5D] = {'EOR', function() ORA(m.readAbsoluteX()) end},
+  [0x59] = {'EOR', function() ORA(m.readAbsoluteY()) end},
+  [0x41] = {'EOR', function() ORA(m.readIndirectX()) end},
+  [0x51] = {'EOR', function() ORA(m.readIndirectY()) end},
 
   -- asl
-  [0x0A] = function() m.status.c = bit.band(m.a, 0x80) ~= 0 and 1 or 0; m.a = m.setSZ(bit.lshift(m.a, 1)) end,
-  [0x06] = function() ASL(m.readImmediate()) end,
-  [0x16] = function() ASL(bit.band(m.readImmediate() + m.x, 0xFF)) end,
-  [0x0E] = function() ASL(m.getAbsolute()) end,
-  [0x1E] = function() ASL(m.getAbsolute() + m.x) end,
+  [0x0A] = {'ASL', function() m.status.c = bit.band(m.a, 0x80) ~= 0 and 1 or 0; m.a = m.setSZ(bit.lshift(m.a, 1)) end},
+  [0x06] = {'ASL', function() ASL(m.readImmediate()) end},
+  [0x16] = {'ASL', function() ASL(bit.band(m.readImmediate() + m.x, 0xFF)) end},
+  [0x0E] = {'ASL', function() ASL(m.getAbsolute()) end},
+  [0x1E] = {'ASL', function() ASL(m.getAbsolute() + m.x) end},
 
   -- lsr
-  [0x4A] = function() m.status.c = m.a % 2; m.a = m.setSZ(bit.rshift(m.a, 1)) end,
-  [0x46] = function() LSR(m.readImmediate()) end,
-  [0x56] = function() LSR(bit.band(m.readImmediate() + m.x, 0xFF)) end,
-  [0x4E] = function() LSR(m.getAbsolute()) end,
-  [0x5E] = function() LSR(m.getAbsolute() + m.x) end,
+  [0x4A] = {'LSR', function() m.status.c = m.a % 2; m.a = m.setSZ(bit.rshift(m.a, 1)) end},
+  [0x46] = {'LSR', function() LSR(m.readImmediate()) end},
+  [0x56] = {'LSR', function() LSR(bit.band(m.readImmediate() + m.x, 0xFF)) end},
+  [0x4E] = {'LSR', function() LSR(m.getAbsolute()) end},
+  [0x5E] = {'LSR', function() LSR(m.getAbsolute() + m.x) end},
 
   -- rol
-  [0x2A] = function()
+  [0x2A] = {'ROL', function()
     local c = m.status.c
     m.status.c = bit.band(m.a, 0x80) ~= 0 and 1 or 0
     m.a = m.setSZ(bit.lshift(m.a, 1) + c)
-  end,
-  [0x26] = function() ROL(m.readImmediate()) end,
-  [0x36] = function() ROL(bit.band(m.readImmediate() + m.x, 0xFF)) end,
-  [0x2E] = function() ROL(m.getAbsolute()) end,
-  [0x3E] = function() ROL(m.getAbsolute() + m.x) end,
+  end},
+  [0x26] = {'ROL', function() ROL(m.readImmediate()) end},
+  [0x36] = {'ROL', function() ROL(bit.band(m.readImmediate() + m.x, 0xFF)) end},
+  [0x2E] = {'ROL', function() ROL(m.getAbsolute()) end},
+  [0x3E] = {'ROL', function() ROL(m.getAbsolute() + m.x) end},
 
   -- ror
-  [0x6A] = function()
+  [0x6A] = {'ROR', function()
     local c = m.status.c == 1 and 0x80 or 0
     m.status.c = m.a % 2
     m.a = m.setSZ(bit.rshift(m.a, 1) + c)
-  end,
-  [0x66] = function() ROR(m.readImmediate()) end,
-  [0x76] = function() ROR(bit.band(m.readImmediate() + m.x, 0xFF)) end,
-  [0x6E] = function() ROR(m.getAbsolute()) end,
-  [0x7E] = function() ROR(m.getAbsolute() + m.x) end,
+  end},
+  [0x66] = {'ROR', function() ROR(m.readImmediate()) end},
+  [0x76] = {'ROR', function() ROR(bit.band(m.readImmediate() + m.x, 0xFF)) end},
+  [0x6E] = {'ROR', function() ROR(m.getAbsolute()) end},
+  [0x7E] = {'ROR', function() ROR(m.getAbsolute() + m.x) end},
 
   -- jsr
-  [0x20] = function()
+  [0x20] = {'JSR', function()
     local target = m.getAbsolute()
-    m.sp = m.sp - 2
-    m.set(0x100 + m.sp, m.ip)
-    m.set(0x101 + m.sp, bit.rshift(m.ip, 8))
+    --print(string.format("JSR %04x from %04x", target, m.ip))
+    m.push(bit.rshift(m.ip, 8))
+    m.push(m.ip)
     m.ip = target - 1
-  end,
+  end},
 
   -- rts
-  [0x60] = function()
-    m.ip = m.read(0x100 + m.sp) + m.read(0x101 + m.sp) * 256
-    m.sp = m.sp + 2
-  end,
+  [0x60] = {'RTS', function()
+    m.ip = m.pop() + 256*m.pop()
+    --print(string.format("NEW IP %04x", m.ip))
+  end},
 
   -- branch
-  [0x10] = function() BRANCH(m.status.s == 1) end,
-  [0x30] = function() BRANCH(m.status.s == 0) end,
-  [0x50] = function() BRANCH(m.status.v == 0) end,
-  [0x70] = function() BRANCH(m.status.v == 1) end,
-  [0x90] = function() BRANCH(m.status.c == 0) end,
-  [0xB0] = function() BRANCH(m.status.c == 1) end,
-  [0xD0] = function() BRANCH(m.status.z == 0) end,
-  [0xF0] = function() BRANCH(m.status.z == 1) end,
+  [0x30] = {'BPL', function() BRANCH(m.status.s == 0) end},
+  [0x10] = {'BMI', function() BRANCH(m.status.s ~= 0) end},
+  [0x50] = {'BVC', function() BRANCH(m.status.v == 0) end},
+  [0x70] = {'BVS', function() BRANCH(m.status.v ~= 0) end},
+  [0x90] = {'BCC', function() BRANCH(m.status.c == 0) end},
+  [0xB0] = {'BCS', function() BRANCH(m.status.c ~= 0) end},
+  [0xD0] = {'BNE', function() BRANCH(m.status.z == 0) end},
+  [0xF0] = {'BEQ', function() BRANCH(m.status.z ~= 0) end},
 
-  [0x69] = function() ADC(m.readImmediate()) end,
-  [0x65] = function() ADC(m.readZeroPage()) end,
-  [0x75] = function() ADC(m.readZeroPageX()) end,
-  [0x6D] = function() ADC(m.readAbsolute()) end,
-  [0x7D] = function() ADC(m.readAbsoluteX()) end,
-  [0x79] = function() ADC(m.readAbsoluteY()) end,
-  [0x61] = function() ADC(m.readIndirectX()) end,
-  [0x71] = function() ADC(m.readIndirectY()) end,
+  [0x69] = {'ADC', function() ADC(m.readImmediate()) end},
+  [0x65] = {'ADC', function() ADC(m.readZeroPage()) end},
+  [0x75] = {'ADC', function() ADC(m.readZeroPageX()) end},
+  [0x6D] = {'ADC', function() ADC(m.readAbsolute()) end},
+  [0x7D] = {'ADC', function() ADC(m.readAbsoluteX()) end},
+  [0x79] = {'ADC', function() ADC(m.readAbsoluteY()) end},
+  [0x61] = {'ADC', function() ADC(m.readIndirectX()) end},
+  [0x71] = {'ADC', function() ADC(m.readIndirectY()) end},
 
-  [0xE9] = function() SBC(m.readImmediate()) end,
-  [0xE5] = function() SBC(m.readZeroPage()) end,
-  [0xF5] = function() SBC(m.readZeroPageX()) end,
-  [0xED] = function() SBC(m.readAbsolute()) end,
-  [0xFD] = function() SBC(m.readAbsoluteX()) end,
-  [0xF9] = function() SBC(m.readAbsoluteY()) end,
-  [0xE1] = function() SBC(m.readIndirectX()) end,
-  [0xF1] = function() SBC(m.readIndirectY()) end,
+  [0xE9] = {'SBC', function() SBC(m.readImmediate()) end},
+  [0xE5] = {'SBC', function() SBC(m.readZeroPage()) end},
+  [0xF5] = {'SBC', function() SBC(m.readZeroPageX()) end},
+  [0xED] = {'SBC', function() SBC(m.readAbsolute()) end},
+  [0xFD] = {'SBC', function() SBC(m.readAbsoluteX()) end},
+  [0xF9] = {'SBC', function() SBC(m.readAbsoluteY()) end},
+  [0xE1] = {'SBC', function() SBC(m.readIndirectX()) end},
+  [0xF1] = {'SBC', function() SBC(m.readIndirectY()) end},
 
-  [0xC9] = function() CMP(m.a, m.readImmediate()) end,
-  [0xC5] = function() CMP(m.a, m.readZeroPage()) end,
-  [0xD5] = function() CMP(m.a, m.readZeroPageX()) end,
-  [0xCD] = function() CMP(m.a, m.readAbsolute()) end,
-  [0xDD] = function() CMP(m.a, m.readAbsoluteX()) end,
-  [0xD9] = function() CMP(m.a, m.readAbsoluteY()) end,
-  [0xC1] = function() CMP(m.a, m.readIndirectX()) end,
-  [0xD1] = function() CMP(m.a, m.readIndirectY()) end,
+  [0xC9] = {'CMP', function() CMP(m.a, m.readImmediate()) end},
+  [0xC5] = {'CMP', function() CMP(m.a, m.readZeroPage()) end},
+  [0xD5] = {'CMP', function() CMP(m.a, m.readZeroPageX()) end},
+  [0xCD] = {'CMP', function() CMP(m.a, m.readAbsolute()) end},
+  [0xDD] = {'CMP', function() CMP(m.a, m.readAbsoluteX()) end},
+  [0xD9] = {'CMP', function() CMP(m.a, m.readAbsoluteY()) end},
+  [0xC1] = {'CMP', function() CMP(m.a, m.readIndirectX()) end},
+  [0xD1] = {'CMP', function() CMP(m.a, m.readIndirectY()) end},
 
-  [0xE0] = function() CMP(m.x, m.readImmediate()) end,
-  [0xE4] = function() CMP(m.x, m.readZeroPage()) end,
-  [0xEC] = function() CMP(m.x, m.readAbsolute()) end,
+  [0xE0] = {'CPX', function() CMP(m.x, m.readImmediate()) end},
+  [0xE4] = {'CPX', function() CMP(m.x, m.readZeroPage()) end},
+  [0xEC] = {'CPX', function() CMP(m.x, m.readAbsolute()) end},
 
-  [0xC0] = function() CMP(m.x, m.readImmediate()) end,
-  [0xC4] = function() CMP(m.x, m.readZeroPage()) end,
-  [0xCC] = function() CMP(m.x, m.readAbsolute()) end,
+  [0xC0] = {'CPY', function() CMP(m.y, m.readImmediate()) end},
+  [0xC4] = {'CPY', function() CMP(m.y, m.readZeroPage()) end},
+  [0xCC] = {'CPY', function() CMP(m.y, m.readAbsolute()) end},
+
+  [0xFF] = {'DBG_START', function()
+    print"DEBUGGER STARTED"
+    trace = true
+  end},
+  [0xFE] = {'DBG_END', function()
+    print "DEBUGGER ENDED"
+    trace = false
+  end},
+  [0xFD] = {'DBG_TRACE', function()
+    m.ip = m.ip + 1
+    while m.memory[m.ip] ~= 0 do
+      io.write(string.char(m.memory[m.ip]))
+      m.ip = m.ip + 1
+    end
+    print()
+  end}
 }
-
--- lda #
-m.memory[0] = 0xA9
-m.memory[1] = string.byte 'A'
--- sta IO_PORT
-m.memory[2] = 0x8D
-m.memory[3] = 0x1C
-m.memory[4] = 0x40
--- ldx #
-m.memory[5] = 0xA2
-m.memory[6] = string.byte 'B'
--- stx IO_PORT
-m.memory[7] = 0x8E
-m.memory[8] = 0x1C
-m.memory[9] = 0x40
--- jmp
-m.memory[10] = 0x4C
-m.memory[11] = 0x02
-m.memory[12] = 0x00
 
 function emulate()
   while true do
     local opcode = m.readImmediate()
     if not opcodes[opcode] then
       print(string.format("\n\nUnknown opcode $%02x", opcode))
+      print(string.format("IP: %04x %02x a:%02x x:%02x y:%02x", m.ip, opcode, m.a, m.x, m.y))
+      io.write('\n')
+      for i = 0, 256 do
+        io.write(string.format("%02x ", m.memory[0x200+i]))
+      end
       return
     else
-      opcodes[opcode]()
+      if trace then
+        print(string.format("IP: %04x %02x %s a:%02x x:%02x y:%02x, v:%01x", m.ip, opcode, opcodes[opcode][1], m.a, m.x, m.y, m.status.v))
+      end
+      --printStack()
+      opcodes[opcode][2]()
     end
   end
 end
 
 local fig = io.open('fig', 'r')
 local rom = fig:read('*a')
-for i = 0, 0x7FFF do
+for i = 0, 0xFFFF do
   --print(i, rom:byte(i+1, i+2), rom:len())
-  m.memory[0x8000 + i] = rom:byte(i+1, i+2)
+  m.memory[i] = rom:byte(i+1, i+2)
 end
-m.ip = 0x8001
 
+m.ip = m.memory[0xFFFC] + bit.lshift(m.memory[0xFFFD], 8) - 1
 emulate()

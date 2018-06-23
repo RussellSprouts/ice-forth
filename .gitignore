@@ -1,0 +1,5 @@
+*.swp
+*.swo
+*.o
+debug.txt
+fig

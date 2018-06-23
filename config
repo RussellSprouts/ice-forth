@@ -1,7 +1,20 @@
 
 MEMORY {
-  CODE: start = $8000, size = $8000, file = %O, fill = yes; 
+  ZEROPAGE: start = $00, size = $100, file = %O, fill = yes;
+  RAM: start = $100, size = $700, file = %O, fill = yes;
+  PADDING: start = $800, size = $5800, file = %O, fill = yes;
+  RAM2: start = $6000, size = $2000, file = %O, fill = yes;
+  CODE: start = $8000, size = $7FFA, file = %O, fill = yes; 
+  VECTORS: start = $FFFA, size = $6, file = %O, fill = yes;
 }
 SEGMENTS {
+  ZEROPAGE: load = ZEROPAGE, type = ro;
+  RAM: load = RAM, type = ro, optional = true;
+  VARIABLES: load = RAM, type = ro, optional = true;
+  RAM2: load = RAM2, type = ro, optional = true;
+  DICT: load = RAM2, type = ro, optional = true;
   CODE: load = CODE, type = ro;
+  VINIT: load = CODE, type = ro, define=yes;
+  DICT_CODE: load = CODE, type = ro;
+  VECTORS: load = VECTORS, type = ro;
 }
