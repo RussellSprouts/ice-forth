@@ -369,14 +369,14 @@ local opcodes = {
   [0x11] = {'ORA', function() ORA(m.readIndirectY()) end},
 
   -- eor
-  [0x49] = {'EOR', function() ORA(m.readImmediate()) end},
-  [0x45] = {'EOR', function() ORA(m.readZeroPage()) end},
-  [0x55] = {'EOR', function() ORA(m.readZeroPageX()) end},
-  [0x4D] = {'EOR', function() ORA(m.readAbsolute()) end},
-  [0x5D] = {'EOR', function() ORA(m.readAbsoluteX()) end},
-  [0x59] = {'EOR', function() ORA(m.readAbsoluteY()) end},
-  [0x41] = {'EOR', function() ORA(m.readIndirectX()) end},
-  [0x51] = {'EOR', function() ORA(m.readIndirectY()) end},
+  [0x49] = {'EOR', function() EOR(m.readImmediate()) end},
+  [0x45] = {'EOR', function() EOR(m.readZeroPage()) end},
+  [0x55] = {'EOR', function() EOR(m.readZeroPageX()) end},
+  [0x4D] = {'EOR', function() EOR(m.readAbsolute()) end},
+  [0x5D] = {'EOR', function() EOR(m.readAbsoluteX()) end},
+  [0x59] = {'EOR', function() EOR(m.readAbsoluteY()) end},
+  [0x41] = {'EOR', function() EOR(m.readIndirectX()) end},
+  [0x51] = {'EOR', function() EOR(m.readIndirectY()) end},
 
   -- asl
   [0x0A] = {'ASL', function() m.status.c = bit.band(m.a, 0x80) ~= 0 and 1 or 0; m.a = m.setSZ(bit.lshift(m.a, 1)) end},
@@ -430,8 +430,8 @@ local opcodes = {
   end},
 
   -- branch
-  [0x30] = {'BPL', function() BRANCH(m.status.s == 0) end},
-  [0x10] = {'BMI', function() BRANCH(m.status.s ~= 0) end},
+  [0x10] = {'BPL', function() BRANCH(m.status.s == 0) end},
+  [0x30] = {'BMI', function() BRANCH(m.status.s ~= 0) end},
   [0x50] = {'BVC', function() BRANCH(m.status.v == 0) end},
   [0x70] = {'BVS', function() BRANCH(m.status.v ~= 0) end},
   [0x90] = {'BCC', function() BRANCH(m.status.c == 0) end},
