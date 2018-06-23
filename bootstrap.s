@@ -973,7 +973,9 @@ defword ".", 0, DOT, CHAR
 
   lda Stack-1, x
   ora Stack-2, x
-  beq @zero
+  bne @nonZero
+  jsr @zero
+@nonZero:
 
   lda Stack-1, x
   jsr @digit
@@ -1001,15 +1003,12 @@ defword ".", 0, DOT, CHAR
   beq :+
   clv
 : bvs @setV
+@zero:
   tay
   lda HexDigits, y
   sta IO_PORT
 @setV:
   rts
-@zero:
-  lda #'0'
-  sta IO_PORT
-  jmp @ending  
 
 HexDigits: .byte "0123456789ABCDEF"
 
