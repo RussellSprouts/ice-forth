@@ -5,7 +5,8 @@ local ffi = require 'ffi'
 local IO_PORT = 0x401C -- pick a register which is not used on a real NES
 local MEMORY_SIZE = 512 * 1024
 
-local lastLineInput = ''
+local forthCode = io.open('bootstrap.f', 'r')
+local lastLineInput = forthCode:read('*a')
 
 local trace = false
 
@@ -473,6 +474,15 @@ local opcodes = {
   [0xC0] = {'CPY', function() CMP(m.y, m.readImmediate()) end},
   [0xC4] = {'CPY', function() CMP(m.y, m.readZeroPage()) end},
   [0xCC] = {'CPY', function() CMP(m.y, m.readAbsolute()) end},
+
+  -- illegal opcodes
+  [0xE3] = {'ISC', function() INC(m.readIndirectX()) SBC(m.readIndirectX()) end},
+  [0xE7] = {'ISC', function() INC(m.readZeroPage()) SBC(m.readZeroPage()) end},
+  [0xEF] = {'ISC', function() INC(m.readAbsolute()) SBC(m.readAbsolute()) end},
+  [0xF3] = {'ISC', function() INC(m.readIndirectY()) SBC(m.readIndirectY()) end},
+  [0xF7] = {'ISC', function() INC(m.readZeroPageX()) SBC(m.readZeroPageX()) end},
+  [0xFB] = {'ISC', function() INC(m.readAbsoluteY()) SBC(m.readAbsoluteY()) end},
+  [0xFF] = {'ISC', function() INC(m.readAbsoluteX()) SBC(m.readAbsoluteX()) end},
 
   [0xFF] = {'DBG_START', function()
     print"DEBUGGER STARTED"

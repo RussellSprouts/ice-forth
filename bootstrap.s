@@ -237,9 +237,9 @@ defword "=", 0, EQU, SUB
   ldy #0
   lda Stack-1, x
   cmp Stack+1, x
-  beq @same
+  bne @diff
   dey
-@same:
+@diff:
   sty Stack, x
   sty Stack+1, x
   rts
@@ -248,13 +248,24 @@ defword "0=", 0, ZEQU, EQU
   ldy #0
   lda Stack, x
   ora Stack+1, x
-  beq @zero
+  bne @nonzero
   dey
-@zero:
+@nonzero:
   sty Stack, x
   sty Stack+1, x
+  rts
 
-defword "AND", 0, AND_, ZEQU
+defword "0>", 0, ZGT, ZEQU
+  lda Stack+1, x
+  ldy #0
+  bmi @minus
+  dey
+@minus:
+  sty Stack, x
+  sty Stack+1, x
+  rts
+
+defword "AND", 0, AND_, ZGT
   lda Stack, x
   and Stack+2, x
   sta Stack+2, x
@@ -313,11 +324,45 @@ defword "!", 0, STORE, INVERT
   rts
 
 defword "+!", 0, ADDSTORE, STORE
-  isc (Stack, x)
+  lda Stack, x
+  sta TMP1
+  lda Stack+1, x
+  sta TMP2
+  
+  ldy #0
+  clc
+  lda (TMP1), y
+  adc Stack+2, x
+  sta (TMP1), y
+  
+  iny
+  lda (TMP1), y
+  adc Stack+3, x
+  sta (TMP1), y
+  
+  pop
+  pop
   rts
 
 defword "-!", 0, SUBSTORE, ADDSTORE
-  dcp (Stack, x)
+  lda Stack, x
+  sta TMP1
+  lda Stack+1, x
+  sta TMP2
+  
+  ldy #0
+  sec
+  lda (TMP1), y
+  sbc Stack+2, x
+  sta (TMP1), y
+  
+  iny
+  lda (TMP1), y
+  sbc Stack+3, x
+  sta (TMP1), y
+  
+  pop
+  pop
   rts
 
 defword "C!", 0, CSTORE, SUBSTORE
@@ -434,6 +479,7 @@ defword "WORD", 0, WORD, KEY
 @skipComment:
   jsr KEY
   lda Stack, x
+  pop
   cmp #$A ; \n
   bne @skipComment
   beq WORD ; bra
@@ -691,7 +737,6 @@ defword "CREATE", 0, CREATE, DHERE
   adc DHERE_VALUE+1
   sta DHERE_VALUE+1 ; move DHERE to point after the Len byte.
 
-  DEBUG_START
   ; now we need to copy the name string.
   lda Stack, x ; get length
   tay
@@ -707,7 +752,6 @@ defword "CREATE", 0, CREATE, DHERE
   sta (DHERE_VALUE), y
   dey
   bpl @loop
-  DEBUG_END
 
   clc
   lda Stack, x ; get length
@@ -813,7 +857,7 @@ defword "HIDE", 0, HIDE, HIDDEN
   jsr FIND
   jmp HIDDEN
 
-defword "'", 0, TICK, HIDE
+defword "[']", 0, TICK, HIDE
   jsr WORD
   jsr FIND
   jmp TOCFA
@@ -1026,13 +1070,28 @@ defword "CR", 0, CR, DOT_S
   sta IO_PORT
   rts
 
-defword "EXECUTE", 0, EXECUTE, CR
+defword "HI", 0, HI, CR
+  lda Stack+1, x
+  sta Stack, x
+  lda #0
+  sta Stack+1, x
+  rts
+
+defword "LO", 0, LO, HI
+  lda #0
+  sta Stack+1, x
+  rts
+
+; Variable which points to the next free variable RAM space.
+defvar "VHERE", VHERE_VALUE+2, VHERE, LO
+
+; Executes the word on the stack.
+defword "EXECUTE", 0, EXECUTE, VHERE
   lda Stack, x
   sta TMP1
   lda Stack+1, x
   sta TMP2
   jmp (TMP1)
-
 
 .segment "DICT"
 DHERE_INIT:
