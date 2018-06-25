@@ -168,3 +168,29 @@
   DROP
   DROP
 ;
+
+: ?HIDDEN
+  4 +
+  C@
+  32 AND
+;
+
+: ?IMMEDIATE
+  4 +
+  C@
+  128 AND
+;
+
+: WORDS
+  LATEST @ ( read latest entry )
+  BEGIN
+    DUP ?HIDDEN NOT IF
+      DUP ID.
+      SPACE
+    THEN
+    @ ( read previous pointer )
+    DUP 0=
+  UNTIL
+  DROP ( drop null pointer )
+  CR
+;
