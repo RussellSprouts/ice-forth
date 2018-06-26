@@ -60,7 +60,7 @@ RStack: .res $100
   ; The indirect pointers must be aligned at the end
   ; of the code region, right up against the interrupt vectors.
   ; Increase this value until just before it errors from overflow.
-  .res 311
+  .res 305
 
 ; Defines a dictionary entry for a word. There are 3 segments of
 ; memory with the information about the word.
@@ -302,7 +302,27 @@ defword "=", 0, EQU, SUB
   sty Stack+1, x
   rts
 
-defword "0=", 0, ZEQU, EQU
+defword "<>", 0, NEQU, EQU
+  pop
+  lda Stack-2, x
+  cmp Stack, x
+  beq @hi
+  lda #$FF
+  sta Stack, x
+  sta Stack+1, x
+  rts
+@hi:
+  ldy #$0
+  lda Stack-1, x
+  cmp Stack+1, x
+  beq @same
+  dey
+@same:
+  sty Stack, x
+  sty Stack+1, x
+  rts 
+
+defword "0=", 0, ZEQU, NEQU
   ldy #0
   lda Stack, x
   ora Stack+1, x
@@ -1032,10 +1052,17 @@ ZBRANCH_TEST:
 
 defword "QUIT", 0, QUIT, ZBRANCH
   stx TMP1
+    cpx #Stack_End
+    bcs @underflow
     ldx #$FF
     txs
   ldx TMP1
   jsr INTERPRET
+  jmp QUIT
+@underflow:
+  jsr DODOTQUOTE
+  .asciiz "Stack underflow detected!"
+  ldx #Stack_End-1
   jmp QUIT
 
 defword "INTERPRET", 0, INTERPRET, QUIT
@@ -1220,8 +1247,38 @@ defword "LO", 0, LO, HI
 ; Variable which points to the next free variable RAM space.
 defvar "VHERE", VHERE_VALUE+2, VHERE, LO
 
+; Prints out the following bytes as a zero-terminated string.
+; Use like:
+;   jsr DODOTQUOTE
+;   .asciiz "Some string"
+defword "(.')", 0, DODOTQUOTE, VHERE
+  pla
+  sta TMP1
+  pla
+  sta TMP2
+
+  ldy #1 ; add 1 because the jsr pushes the last byte of the jsr
+@loop:
+  lda (TMP1), y
+  beq @done
+  sta IO_PORT
+  iny
+  bne @loop  
+@done:
+  clc
+  tya
+  adc TMP1
+  sta TMP1
+  lda TMP2
+  adc #0
+  pha
+  lda TMP1
+  pha
+  rts
+  
+
 ; Executes the word on the stack.
-defword "EXECUTE", 0, EXECUTE, VHERE
+defword "EXECUTE", 0, EXECUTE, DODOTQUOTE
   lda Stack, x
   sta TMP1
   lda Stack+1, x
@@ -1261,12 +1318,6 @@ reset:
   cpx #(VINIT_END - VINIT_START)
   bne @vinitLoop
 
-  lda #'>'
-  sta IO_PORT
-  lda #' '
-  sta IO_PORT
-  lda 10
-  sta IO_PORT
   ldx #Stack_End - 1
 
   jmp QUIT

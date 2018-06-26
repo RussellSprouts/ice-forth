@@ -112,6 +112,8 @@
 
 : '(' [ CHAR ( ] LITERAL ;
 : ')' [ CHAR ) ] LITERAL ;
+: '"' [ CHAR " ] LITERAL ;
+
 
 : ( IMMEDIATE
   1
@@ -194,3 +196,35 @@
   DROP ( drop null pointer )
   CR
 ;
+
+: COMPILING STATE @ ;
+
+( -- )
+: ." IMMEDIATE
+  COMPILING IF
+    [ ['] (.') ] LITERAL JSR, ( compile jsr (.") )
+
+    BEGIN
+      KEY
+      DUP '"' <> IF
+        C,
+        0
+      THEN
+    UNTIL
+    0 C,
+  ELSE
+    BEGIN
+      KEY
+      DUP '"' <> IF
+        EMIT
+        0
+      THEN
+    UNTIL
+  THEN
+;
+
+: WELCOME
+  ." Welcome to Forth!" CR
+;
+
+WELCOME
