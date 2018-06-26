@@ -228,3 +228,10 @@
 ;
 
 WELCOME
+
+( A jump to 0 is treated as a signal to
+  the emulator to stop execution and freeze
+  the ROM )
+: FREEZE
+  [ 0 JSR, ] 
+;

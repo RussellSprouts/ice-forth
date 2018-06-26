@@ -504,6 +504,9 @@ local opcodes = {
 
 function emulate()
   while true do
+    if m.ip == -1 then
+      return
+    end
     local opcode = m.readImmediate()
     if not opcodes[opcode] then
       print(string.format("\n\nUnknown opcode $%02x", opcode))
@@ -532,3 +535,10 @@ end
 
 m.ip = m.memory[0xFFFC] + bit.lshift(m.memory[0xFFFD], 8) - 1
 emulate()
+
+print [[
+==============================
+Execution halted. Freezing ROM
+==============================
+]]
+
