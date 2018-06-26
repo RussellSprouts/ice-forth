@@ -56,6 +56,44 @@ RStack: .res $100
    .asciiz str
 .endmacro
 
+.segment "INDIRECT_PTRS"
+  ; The indirect pointers must be aligned at the end
+  ; of the code region, right up against the interrupt vectors.
+  ; Increase this value until just before it errors from overflow.
+  .res 311
+
+; Defines a dictionary entry for a word. There are 3 segments of
+; memory with the information about the word.
+; The dictionary contains a header with these fields:
+; DUP_DICT_ENTRY:
+;   .word LINK                      ; Pointer to the previous entry
+;   .word INDIRECT                  ; The code entry point. jsr to this location.
+;   .byte IMMEDIATE | HIDDEN | LEN  ; 2 flags and the name length
+;   .byte "DUP"                     ; The name
+;
+; The dictionary is built in what will become RAM on the cartridge. This
+; means that once the cart is frozen, the dictionary will be deleted.
+; That way there's less overhead
+;
+; The code entry point is in INDIRECT_PTRS, and for the word DUP,
+; it would look like this:
+;
+; DUP:
+;     jmp DUP_IMPL
+;
+; All words have an extra jump at INDIRECT_PTRS which jumps to the
+; IMPL in "DICT_CODE". INDIRECT_PTRS grows downwards from the
+; end of memory, while the code and dictionary grow upwards.
+; The extra indirection allows us to later move the implementation code
+; blocks around and only have to update the indirect pointer.
+;
+; Lastly, in DICT_CODE we have the implementation of the entry.
+; It looks like this:
+; .word DUP_DICT_ENTRY
+; DUP_IMPL:
+;   ...
+; The two bytes before the IMPL are a pointer to the dict entry, so we can
+; find it given that.
 .macro defword name, flags, label, previous
   .segment "DICT"
     .ident(.concat(.string(label), "_DICT_ENTRY")):
@@ -66,11 +104,21 @@ RStack: .res $100
     .word .ident(.string(label))
     ; length and name
     .byte .strlen(name) | flags, name
+  .segment "INDIRECT_PTRS"
+    .ident(.string(label)):
+      jmp .ident(.concat(.string(label), "_IMPL"))
   .segment "DICT_CODE"
     .word .ident(.concat(.string(label), "_DICT_ENTRY"))
-    .ident(.string(label)):
+    .ident(.concat(.string(label), "_IMPL")):
 .endmacro
 
+; Variables are a special kind of word which reserve
+; two bytes of space in the VARIABLES segment, and when
+; executed, push that address on the stack.
+; We want them to keep their values even after freezing,
+; so we also put an entry in VINIT, which consists of the
+; address of the variable and the initial value. On reset,
+; the code reads those entries and initializes all of them.
 .macro defvar name, init, label, previous
   defword name, 0, label, previous
     dex
@@ -88,6 +136,8 @@ RStack: .res $100
     .word init
 .endmacro
 
+; The same as a variable, except it is allocated in the zero
+; page.
 .macro defvarzp name, init, label, previous
   defword name, 0, label, previous
     dex
@@ -105,6 +155,8 @@ RStack: .res $100
     .word init
 .endmacro
 
+; A constant is a word which pushes its value onto the stack
+; when it is executed.
 .macro defconst name, value, label, previous
   defword name, 0, label, previous
     dex
@@ -118,8 +170,14 @@ RStack: .res $100
 
 NULL_DICT_ENTRY := 0
 
+; IHERE is the pointer to the indirect pointers
+; memory area, which grows downwards. It needs to
+; be initialized to the first dictionary entry,
+; since the assembly file doesn't grow downwards.
+defvarzp "IHERE", IHERE-1, IHERE, NULL
+
 ; ( a -- )
-defword "DROP", 0, DROP, NULL
+defword "DROP", 0, DROP, IHERE
   pop
   rts
 
@@ -455,7 +513,7 @@ defword "WORD", 0, WORD, KEY
   cmp #'\'
   beq @skipComment
   cmp #' ' + 1
-  bcc WORD
+  bcc WORD_IMPL
 
 @loop:
   ldy TMP1
@@ -482,7 +540,7 @@ defword "WORD", 0, WORD, KEY
   pop
   cmp #$A ; \n
   bne @skipComment
-  beq WORD ; bra
+  beq WORD_IMPL ; bra
 
 .segment "VARIABLES"
   @word_buffer: .res 32
@@ -682,53 +740,104 @@ defvarzp "CHERE", CHERE_INIT, CHERE, TOCFA
 ; Points to the next free byte in the dictionary area.
 defvarzp "DHERE", DHERE_INIT, DHERE, CHERE
 
+
+JMP_OP = $4C
+
 ; ( str-ptr len -- )
 ; Creates a new dictionary entry
 defword "CREATE", 0, CREATE, DHERE
-  ; Set previous pointer
-  ldy #(DictEntry::PreviousPtr)
-  lda LATEST_VALUE
-  sta (DHERE_VALUE), y
-  lda LATEST_VALUE+1
-  iny
-  sta (DHERE_VALUE), y ; store the previous pointer
+  ; Set the new entry's previous pointer
+  ; LATEST @ DHERE @ PreviousPtr + !
+  jsr LATEST
+  jsr FETCH
+  jsr DHERE
+  jsr FETCH
+  push DictEntry::PreviousPtr
+  jsr ADD
+  jsr STORE
 
-  ; LATEST = DHERE
-  lda DHERE_VALUE
-  sta LATEST_VALUE
-  lda DHERE_VALUE+1
-  sta LATEST_VALUE+1
+  ; Update LATEST to the new entry
+  ; DHERE @ LATEST !
+  jsr DHERE
+  jsr FETCH
+  jsr LATEST
+  jsr STORE
 
-  ; Set code pointer to CHERE+2
-  ldy #(DictEntry::CodePtr)
-  clc
-  lda CHERE_VALUE
-  adc #<2
-  sta (DHERE_VALUE), y
-  lda CHERE_VALUE+1
-  adc #>2
-  iny
-  sta (DHERE_VALUE), y
+  ; Set the code pointer to the new code
+  ; space.
+  ; CHERE @ 2 + LATEST @ CodePtr + !
+
+  ; jsr CHERE
+  ; jsr FETCH
+  ; jsr INCR
+  ; jsr INCR
+  ; jsr LATEST
+  ; jsr FETCH
+  ; push DictEntry::CodePtr
+  ; jsr ADD
+  ; jsr STORE
+
+  ; Write the dictionary entry in the code space.
+  ; DHERE @ CHERE @ !
+  jsr DHERE
+  jsr FETCH
+  jsr CHERE
+  jsr FETCH
+  jsr STORE
   
-  lda #0
-  lda DHERE_VALUE
-  sta (CHERE_VALUE), y
-  lda DHERE_VALUE+1
-  iny
-  sta (CHERE_VALUE), y ; store the dictionary pointer in the code space
+  ; ( stack is now string-ptr len )
+  ; Store length in new entry
+  ; DUP DHERE Len + C!
+  jsr DUP
+  jsr DHERE
+  jsr FETCH
+  push DictEntry::Len
+  jsr ADD
+  jsr CSTORE
 
-  lda Stack, x ; length byte
-  ldy #(DictEntry::Len)
-  sta (DHERE_VALUE), y ; store the length byte
-
+  ; Add 2 to CHERE
   clc
   lda #<2
   adc CHERE_VALUE
   sta CHERE_VALUE
   lda #>2
   adc CHERE_VALUE+1
-  sta CHERE_VALUE+1 ; add 2 to CHERE
+  sta CHERE_VALUE+1
 
+  ; Subtract 3 from IHERE.
+  sec
+  lda IHERE_VALUE
+  sbc #<3
+  sta IHERE_VALUE
+  lda IHERE_VALUE+1
+  sbc #>3
+  sta IHERE_VALUE+1 
+
+  ; Write jmp CHERE to new IHERE location.
+  ldy #1
+  lda #JMP_OP
+  sta (IHERE_VALUE), y
+  iny
+  lda CHERE_VALUE
+  sta (IHERE_VALUE), y
+  iny
+  lda CHERE_VALUE+1
+  sta (IHERE_VALUE), y
+
+  ; Set the code pointer to the indirect
+  ; pointer's jmp.
+
+  ; IHERE @ 1+ LATEST @ CodePtr + !
+  jsr IHERE
+  jsr FETCH
+  jsr INCR
+  jsr LATEST
+  jsr FETCH
+  push DictEntry::CodePtr
+  jsr ADD
+  jsr STORE
+
+  ; Move DHERE past the Len byte and pointers
   clc
   lda #<(DictEntry::Len+1)
   adc DHERE_VALUE

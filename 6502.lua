@@ -507,7 +507,7 @@ function emulate()
     local opcode = m.readImmediate()
     if not opcodes[opcode] then
       print(string.format("\n\nUnknown opcode $%02x", opcode))
-      print(string.format("IP: %04x %02x a:%02x x:%02x y:%02x", m.ip, opcode, m.a, m.x, m.y))
+      print(string.format("IP:\t%04x\t%02x\ta:%02x\tx:%02x\ty:%02x", m.ip, opcode, m.a, m.x, m.y))
       io.write('\n')
       for i = 0, 256 do
         io.write(string.format("%02x ", m.memory[0x200+i]))
@@ -515,7 +515,7 @@ function emulate()
       return
     else
       if trace then
-        print(string.format("IP: %04x %02x %s a:%02x x:%02x y:%02x, v:%01x", m.ip, opcode, opcodes[opcode][1], m.a, m.x, m.y, m.status.v))
+        print(string.format("IP:\t%04x\t%02x\t%s\ta:%02x\tx:%02x\ty:%02x\tv:%01x", m.ip, opcode, opcodes[opcode][1], m.a, m.x, m.y, m.status.v))
       end
       --printStack()
       opcodes[opcode][2]()
