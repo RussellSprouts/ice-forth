@@ -453,20 +453,46 @@ defword "C@", 0, CFETCH, FETCH
 defconst "VERSION", 1, VERSION, CFETCH
 
 defword ">R", 0, TOR, VERSION
+  ; Store return pointer temporarily.
+  pla
+  sta TMP1
+  pla
+  sta TMP2
+
   lda Stack+1, x
   pha
   lda Stack, x
   pha
+
+  ; Restore return pointer
+  lda TMP2
+  pha
+  lda TMP1
+  pha
+
   pop
   rts
 
 defword "R>", 0, FROMR, TOR
+  ; Store return pointer temporarily
+  pla
+  sta TMP1
+  pla
+  sta TMP2
+
   dex
   dex
   pla
   sta Stack, x
   pla
   sta Stack+1, x
+
+  ; Restore return pointer
+  lda TMP2
+  pha
+  lda TMP1
+  pha
+  
   rts
 
 defword "RDROP", 0, RDROP, FROMR
