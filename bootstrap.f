@@ -1,237 +1,237 @@
-
 : '\n' 10 ;
-: BL 32 ;
+: bl 32 ;
 
-: SPACE BL EMIT ;
+: space bl emit ;
 
-: NEGATE 0 SWAP - ;
+: negate 0 swap - ;
 
-: TRUE 0 1 - ;
-: FALSE 0 ;
-: NOT 0= ;
+: true 0 1 - ;
+: false 0 ;
+: not 0= ;
 
-: JSR, 32 C, , ;
+: hex 16 base ! ;
+: decimal 10 base ! ;
+
+: jsr, 32 c, , ;
 
 \ Recursively call the current word
-: RECURSE IMMEDIATE
-  LATEST @
-  >CFA
-  JSR,
+: recurse immediate
+  latest @
+  jsr,
 ;
 
 \ Takes the next word and compiles it even if it's immediate
-: [COMPILE] IMMEDIATE
-  WORD
-  FIND
-  >CFA
-  JSR,
+: [compile] immediate
+  word
+  find
+  jsr,
 ;
+
 
 : 2- 2 - ;
 : 2+ 2 + ;
 
-16 BASE !
-: lda.i 0A9 C, C, ;
-: lda.zx 0B5 C, C, ;
-: sta.zx 095 C, C, ;
-: beq 0F0 C, C, ;
-: bne 0D0 C, C, ;
-: ora.zx 015 C, C, ;
-: pop 0E8E8 , ;
-: dex;dex 0CACA , ;
-: clv;bvc 050B8 , C, ;
-: rts 060 C, ;
+hex
+  : lda.i 0A9 c, c, ;
+  : lda.zx 0B5 c, c, ;
+  : sta.zx 095 c, c, ;
+  : beq 0F0 c, c, ;
+  : bne 0D0 c, c, ;
+  : ora.zx 015 c, c, ;
+  : pop 0E8E8 , ;
+  : dex;dex 0CACA , ;
+  : clv;bvc 050B8 , c, ;
+  : rts 060 c, ;
 
-: DEBUG IMMEDIATE 0FF C, ;
-: DEBUG_END IMMEDIATE 0FE C, ;
+  : debug_start immediate 0FF c, ;
+  : debug_end immediate 0FE c, ;
 
-: STACK 8 ;
-0A BASE !
+  : stack 8 ;
+decimal
 
 \ Save branch instruction address
-: IF IMMEDIATE
-  \ [COMPILE] DEBUG
+: if immediate
+  \ [compile] debug
   pop
-  STACK 2- lda.zx
-  STACK 1- ora.zx
-  CHERE @
+  stack 2- lda.zx
+  stack 1- ora.zx
+  chere @
   0 beq
 ;
 
-: UNLESS IMMEDIATE
-  ['] NOT JSR,
-  [COMPILE] IF
+: unless immediate
+  ['] not jsr,
+  [compile] if
 ;
 
 \ Write the branch target to here.
-: THEN IMMEDIATE
-  DUP
-  CHERE @ SWAP - 2-
-  SWAP 1+ C! 
+: then immediate
+  dup
+  chere @ swap - 2-
+  swap 1+ c! 
 ;
 
-: ELSE IMMEDIATE
-  CHERE @ 1+
-  SWAP
+: else immediate
+  chere @ 1+
+  swap
   0 clv;bvc
-  DUP
-  CHERE @ SWAP - 2-
-  SWAP 1+ C!
+  dup
+  chere @ swap - 2-
+  swap 1+ c!
 ;
 
-: TEST IF EMIT ELSE 1+ EMIT THEN ;
-
-: BEGIN IMMEDIATE
-  \ [COMPILE] DEBUG
-  CHERE @
+: begin immediate
+  \ [compile] debug
+  chere @
 ;
 
 \ ( branch-target -- )
-: UNTIL IMMEDIATE
+: until immediate
   pop
-  STACK 2- lda.zx
-  STACK 1- ora.zx
-  CHERE @ - 2- beq
+  stack 2- lda.zx
+  stack 1- ora.zx
+  chere @ - 2- beq
 ;
 
-: WHILE
+: while
   pop
-  STACK 2- lda.zx
-  STACK 1- ora.zx
-  CHERE @ - 2- bne
+  stack 2- lda.zx
+  stack 1- ora.zx
+  chere @ - 2- bne
 ;
 
-: LITERAL IMMEDIATE
+: literal immediate
   dex;dex
-  DUP
-  LO lda.i
-  STACK sta.zx
-  HI lda.i
-  STACK 1+ sta.zx
+  dup
+  <byte lda.i
+  stack sta.zx
+  >byte lda.i
+  stack 1+ sta.zx
 ;
 
-: '(' [ CHAR ( ] LITERAL ;
-: ')' [ CHAR ) ] LITERAL ;
-: '"' [ CHAR " ] LITERAL ;
+: '(' [ char ( ] literal ;
+: ')' [ char ) ] literal ;
+: '"' [ char " ] literal ;
 
 
-: ( IMMEDIATE
+: ( immediate
   1
-  BEGIN
-    KEY
-    DUP '(' = IF
-      DROP
+  begin
+    key
+    dup '(' = if
+      drop
       1+
-    ELSE
-      ')' = IF
+    else
+      ')' = if
         1-
-      THEN
-    THEN
-  DUP 0= UNTIL
-  DROP
+      then
+    then
+  dup 0= until
+  drop
 ;
 
 ( Now I can write comments using (nested) parens )
 
-: ALLOT
-  VHERE +!
+: allot
+  vhere +!
 ;
 
-( Declares a constant value. Use like `10 CONSTANT VariableName`)
-: CONSTANT IMMEDIATE
-  WORD
-  CREATE
-  [COMPILE] LITERAL
+( Declares a constant value. Use like `10 constant VariableName`)
+: constant immediate
+  word
+  create
+  [compile] literal
   rts
 ;
 
 ( Declares an uninitialized variable, giving it space
-  after VHERE )
-: VARIABLE IMMEDIATE
-  VHERE @
-  2 ALLOT
-  [COMPILE] CONSTANT
+  after vhere )
+: variable immediate
+  vhere @
+  2 allot
+  [compile] constant
 ;
 
 ( Takes a dictionary entry and prints the name of the word )
-: ID.
-  4 +    ( Skip the pointers )
-  DUP C@ ( get the length )
-  31 AND ( Mask the flags )
+: id.
+  dict::len +    ( Skip the pointers )
+  dup c@ ( get the length )
+  31 and ( Mask the flags )
   
-  BEGIN
-    SWAP 1+ ( addr len -- len addr+1 )
-    DUP C@ ( len addr -- len addr char )
-    EMIT
-    SWAP 1- ( len addr -- addr len-1 )
+  begin
+    swap 1+ ( addr len -- len addr+1 )
+    dup c@ ( len addr -- len addr char )
+    emit
+    swap 1- ( len addr -- addr len-1 )
 
-    DUP 0=
-  UNTIL 
-  DROP
-  DROP
+    dup 0=
+  until 
+  drop
+  drop
 ;
 
-: ?HIDDEN
-  4 +
-  C@
-  32 AND
+: ?hidden
+  dict::len +
+  c@
+  32 and
 ;
 
-: ?IMMEDIATE
-  4 +
-  C@
-  128 AND
+: ?immediate
+  dict::len +
+  c@
+  128 and
 ;
 
-: WORDS
-  LATEST @ ( read latest entry )
-  BEGIN
-    DUP ?HIDDEN NOT IF
-      DUP ID.
-      SPACE
-    THEN
-    @ ( read previous pointer )
-    DUP 0=
-  UNTIL
-  DROP ( drop null pointer )
-  CR
+: words
+  latest @ ( read latest entry )
+  begin
+    dup ?hidden not if
+      dup id.
+      space
+    then
+    dict::prev + @ ( read previous pointer )
+    dup 0=
+  until
+  drop ( drop null pointer )
+  cr
 ;
 
-: COMPILING STATE @ ;
+: compiling state @ ;
 
 ( -- )
-: ." IMMEDIATE
-  COMPILING IF
-    [ ['] (.') ] LITERAL JSR, ( compile jsr (.") )
+: ." immediate
+  compiling if
+    [ ['] (.') ] literal jsr, ( compile jsr (.") )
 
-    BEGIN
-      KEY
-      DUP '"' <> IF
-        C,
+    begin
+      key
+      dup '"' <> if
+        c,
         0
-      THEN
-    UNTIL
-    0 C,
-  ELSE
-    BEGIN
-      KEY
-      DUP '"' <> IF
-        EMIT
+      then
+    until
+    0 c,
+  else
+    begin
+      key
+      dup '"' <> if
+        emit
         0
-      THEN
-    UNTIL
-  THEN
+      then
+    until
+  then
 ;
 
-: WELCOME
-  ." Welcome to Forth!" CR
+: welcome
+  ." Welcome to Forth!" cr
 ;
 
-WELCOME
+welcome
 
 ( A jump to 0 is treated as a signal to
   the emulator to stop execution and freeze
   the ROM )
-: FREEZE
-  [ 0 JSR, ] 
+: freeze
+  ( TODO write header to somewhere standard )
+  [ 0 jsr, ] 
 ;

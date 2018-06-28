@@ -488,11 +488,11 @@ local opcodes = {
     print"DEBUGGER STARTED"
     trace = true
   end},
-  [0xFE] = {'DBG_END', function()
+  [0xEF] = {'DBG_END', function()
     print "DEBUGGER ENDED"
     trace = false
   end},
-  [0xFD] = {'DBG_TRACE', function()
+  [0xDF] = {'DBG_TRACE', function()
     m.ip = m.ip + 1
     while m.memory[m.ip] ~= 0 do
       io.write(string.char(m.memory[m.ip]))
@@ -542,3 +542,10 @@ Execution halted. Freezing ROM
 ==============================
 ]]
 
+local romout = io.open('out.nes', 'w')
+
+romout:write("NES\x1A\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+
+for i = 0, 0x7FFF do
+  romout:write(string.char(m.memory[i + 0x8000]))
+end
