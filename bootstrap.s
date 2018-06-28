@@ -39,6 +39,11 @@ F_IMMED = $80
 ; The word should not be found in a dictionary search.
 F_HIDDEN = $20
 
+.segment "DICT"
+; Reserve space to push the dictionary to the end of the memory
+; space, since it now grows down.
+.res $D61
+
 .segment "ZEROPAGE": zeropage
 TMP1: .res 1
 TMP2: .res 1
@@ -113,8 +118,6 @@ RStack: .res $100
    .byte $DF
    .asciiz str
 .endmacro
-
-.segment "INDIRECT_PTRS"
 
 ; New dictionary format, unifying xt and dictionary entry.
 ; jmp CODE_IMPL
@@ -783,15 +786,28 @@ defword "find", 0, FIND, LATEST
 defvarzp "chere", CHERE_INIT, CHERE, FIND
 
 ; Dictionary Here pointer
-; Points to the next free byte in the dictionary area.
-defvarzp "dhere", DHERE_INIT, DHERE, CHERE
-
+; The dictionary grows downward, so this points to the
+; first used byte in dictionary memory.
+; This must be initialized to the first dict entry.
+defvarzp "dhere", DictEntryCodePtr, DHERE, CHERE
 
 JMP_OP = $4C
 
 ; ( str-ptr len -- )
 ; Creates a new dictionary entry
 defword "create", 0, CREATE, DHERE
+  ; The dict entry needs str-len + DictEntry::Name bytes of space.
+  ; Subtract from DHERE to allocate the space.
+  jsr DUP ; str length
+  push DictEntry::Name
+  jsr ADD
+  jsr DHERE
+  jsr FETCH
+  jsr SWAP
+  jsr SUB
+  jsr DHERE
+  jsr STORE
+
   ; Set the new entry's previous pointer
   ; LATEST @ DHERE @ PreviousPtr + !
   jsr LATEST
@@ -838,12 +854,12 @@ defword "create", 0, CREATE, DHERE
   
   ; Move DHERE past the Len byte and pointers
   clc
-  lda #<(DictEntry::Len+1)
+  lda #<(DictEntry::Name)
   adc DHERE_VALUE
-  sta DHERE_VALUE
-  lda #>(DictEntry::Len+1)
+  sta TMP3
+  lda #>(DictEntry::Name)
   adc DHERE_VALUE+1
-  sta DHERE_VALUE+1 ; move DHERE to point after the Len byte.
+  sta TMP4
 
   ; now we need to copy the name string.
   lda Stack, x ; get length
@@ -857,17 +873,9 @@ defword "create", 0, CREATE, DHERE
 
 @loop:
   lda (TMP1), y
-  sta (DHERE_VALUE), y
+  sta (TMP3), y
   dey
   bpl @loop
-
-  clc
-  lda Stack, x ; get length
-  adc DHERE_VALUE
-  sta DHERE_VALUE
-  lda #0
-  adc DHERE_VALUE+1
-  sta DHERE_VALUE+1 ; add string length to DHERE.
 
   pop
   pop
@@ -1200,9 +1208,6 @@ defword "(.')", 0, DODOTQUOTE, VHERE
 defword "execute", 0, EXECUTE, DODOTQUOTE
   toTMP1
   jmp (TMP1)
-
-.segment "DICT"
-DHERE_INIT:
 
 .segment "DICT_CODE"
 CHERE_INIT:
