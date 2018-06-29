@@ -232,6 +232,27 @@ welcome
   the emulator to stop execution and freeze
   the ROM )
 : freeze
-  ( TODO write header to somewhere standard )
   [ 0 jsr, ] 
 ;
+
+hex
+( xt -- )
+: set-reset! 0FFFC ! ;
+( xt -- )
+: set-nmi! 0FFFA ! ;
+( xt -- )
+: set-irq! 0FFFE ! ;
+
+( Ends an interrupt handler definiton )
+: ;int immediate
+  40 c, \ append rti
+  latest @ hidden \ unhide
+  [compile] [
+;
+decimal
+
+: int-handle ;int
+['] int-handle set-reset!
+['] int-handle set-nmi!
+['] int-handle set-irq!
+
