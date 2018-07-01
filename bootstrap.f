@@ -252,7 +252,13 @@ hex
 decimal
 
 : int-handle ;int
-['] int-handle set-reset!
+
 ['] int-handle set-nmi!
 ['] int-handle set-irq!
 
+( new-xt old-xt -- )
+( Redefines old as new, so that all calls to old
+  will instead call new. Doesn't replace inlined calls )
+: monkey-patch
+  dict::impl + !
+;

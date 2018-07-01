@@ -216,7 +216,7 @@ end
 
 local function ROR(addr)
   local value = m.read(addr)
-  local c = m.status.c and 0x80 or 0
+  local c = m.status.c ~= 0 and 0x80 or 0
   m.status.c = value % 2
   m.set(addr, m.setSZ(bit.rshift(value, 1) + c))
 end
@@ -406,7 +406,7 @@ local opcodes = {
 
   -- ror
   [0x6A] = {'ROR', function()
-    local c = m.status.c == 1 and 0x80 or 0
+    local c = m.status.c ~= 0 and 0x80 or 0
     m.status.c = m.a % 2
     m.a = m.setSZ(bit.rshift(m.a, 1) + c)
   end},
@@ -544,7 +544,7 @@ Execution halted. Freezing ROM
 
 local romout = io.open('out.nes', 'w')
 
-romout:write("NES\x1A\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+romout:write("NES\x1A\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
 
 for i = 0, 0x7FFF do
   romout:write(string.char(m.memory[i + 0x8000]))

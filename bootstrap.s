@@ -38,11 +38,13 @@ IO_PORT := $401C
 F_IMMED = $80
 ; The word should not be found in a dictionary search.
 F_HIDDEN = $20
+; Always inline the word
+F_INLINE = $40
 
 .segment "DICT"
 ; Reserve space to push the dictionary to the end of the memory
 ; space, since it now grows down.
-.res $D61
+.res $D56
 
 .segment "ZEROPAGE": zeropage
 TMP1: .res 1
@@ -150,12 +152,7 @@ RStack: .res $100
 ; the code reads those entries and initializes all of them.
 .macro defvar name, init, label, previous
   defword name, 0, label, previous
-    dex
-    dex
-    lda #<.ident(.concat(.string(label), "_VALUE"))
-    sta Stack, x
-    lda #>.ident(.concat(.string(label), "_VALUE"))
-    sta Stack+1, x
+    push .ident(.concat(.string(label), "_VALUE"))
     rts
   .segment "VARIABLES"
   .ident(.concat(.string(label), "_VALUE")):
@@ -169,12 +166,7 @@ RStack: .res $100
 ; page.
 .macro defvarzp name, init, label, previous
   defword name, 0, label, previous
-    dex
-    dex
-    lda #<.ident(.concat(.string(label), "_VALUE"))
-    sta Stack, x
-    lda #>.ident(.concat(.string(label), "_VALUE"))
-    sta Stack+1, x
+    push .ident(.concat(.string(label), "_VALUE"))
     rts
   .segment "ZEROPAGE": zeropage
   .ident(.concat(.string(label), "_VALUE")):
@@ -188,12 +180,7 @@ RStack: .res $100
 ; when it is executed.
 .macro defconst name, value, label, previous
   defword name, 0, label, previous
-    dex
-    dex
-    lda #<value
-    sta Stack, x
-    lda #>value
-    sta Stack+1, x
+    push value
     rts
 .endmacro
 
@@ -389,7 +376,7 @@ defword "or", 0, OR, XOR
   pop
   rts
 
-defword "xor", 0, XOR, INVERT
+defword "xor", 0, XOR, ASL_
   lda Stack, x
   eor Stack+2, x
   sta Stack+2, x
@@ -397,6 +384,16 @@ defword "xor", 0, XOR, INVERT
   eor Stack+3, x
   sta Stack+3, x
   pop
+  rts
+
+defword "asl", 0, ASL_, LSR_
+  asl Stack, x
+  rol Stack+1, x
+  rts
+
+defword "lsr", 0, LSR_, INVERT
+  lsr Stack+1, x
+  ror Stack, x
   rts
 
 defword "invert", 0, INVERT, STORE
@@ -612,7 +609,7 @@ defword "word", 0, WORD, BASE
 defvar "base", 10, BASE, NUMBER
 
 ; ( str len -- parsed-number )
-; or ( str len -- str len ) on error
+; or ( str len -- str len 0 ) on error
 ; Also, carry is set if there's an error.
 defword "number", 0, NUMBER, LATEST
 
@@ -684,12 +681,19 @@ defword "number", 0, NUMBER, LATEST
   sta Stack, x
   lda Result+1
   sta Stack+1, x ; put parsed number of the stack.
+
+  push -1
   clc ; signal OK
   rts
 
 @invalid:
   pla
   tax ; restore stack pointer
+  lda #0
+  dex
+  dex
+  sta Stack, x
+  sta Stack+1, x 
   sec ; signal the error
   rts
 
@@ -1030,6 +1034,7 @@ defword "interpret", 0, INTERPRET, CHAR
   ; Didn't find the word in the dictionary, maybe it's a literal.
   jsr NUMBER ; parse as number 
   bcs @nan ; if error code set
+  pop ; drop the truth value on the stack.
   ; Now we have a number on the top of stack.
   lda STATE_VALUE
   beq @executeLiteral
@@ -1054,7 +1059,7 @@ defword "interpret", 0, INTERPRET, CHAR
   rts
 
 @nan:
-  ; pop ; drop -1 code
+  pop ; drop 0
   lda Stack+2, x
   sta TMP1
   lda Stack+3, x
@@ -1211,6 +1216,8 @@ VINIT_END:
 
 .segment "CODE"
 reset:
+  sei
+  cld
   ; Initialize the variables.
   ; VINIT is organized as | ADDR | VALUE | ADDR | VALUE | ...
   ldx #0
