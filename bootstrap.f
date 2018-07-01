@@ -33,6 +33,8 @@
 
 hex
   : lda.i 0A9 c, c, ;
+  : lda.a 0AD c, , ;
+  : sta.a 08D c, , ;
   : lda.zx 0B5 c, c, ;
   : sta.zx 095 c, c, ;
   : beq 0F0 c, c, ;
@@ -40,6 +42,7 @@ hex
   : ora.zx 015 c, c, ;
   : pop 0E8E8 , ;
   : dex;dex 0CACA , ;
+  : inx;inx 0E8E8 , ;
   : clv;bvc 050B8 , c, ;
   : rts 060 c, ;
 
@@ -152,6 +155,11 @@ decimal
   [compile] constant
 ;
 
+( xt -- impl )
+: >impl
+  dict::impl + @
+;
+
 ( Takes a dictionary entry and prints the name of the word )
 : id.
   dict::len +    ( Skip the pointers )
@@ -196,11 +204,11 @@ decimal
   cr
 ;
 
-: compiling state @ ;
+: compiling? state @ ;
 
 ( -- )
 : ." immediate
-  compiling if
+  compiling? if
     [ ['] (.') ] literal jsr, ( compile jsr (.") )
 
     begin
@@ -235,6 +243,52 @@ welcome
   [ 0 jsr, ] 
 ;
 
+( A variable which, when called, pushes its value instead of its address )
+: val
+  vhere @ ( get the variable address )
+  2 allot ( allot two variables )
+  word
+  create ( create a new dictionary entry )
+  dex;dex
+  dup lda.a ( load the value from the variable and push it to the stack )
+  stack sta.zx
+  dup 1+ lda.a
+  stack 1+ sta.zx 
+  rts
+
+  ( initialize val )
+  !
+;
+
+( Gets the address of a val )
+: val-addr
+  word
+  find
+  dup 0= if
+    drop
+    drop
+    drop
+    ." Cannot get address of unknown val." cr
+    quit
+  then
+  >impl 3 + @ ( read variable address from val impl )
+;
+
+( Writes a value to a `val` variable )
+: to immediate
+  val-addr 
+  compiling? if
+    dup
+    stack lda.zx
+    sta.a
+    stack 1+ lda.zx
+    1+ sta.a
+    inx;inx
+  else
+    !
+  then
+;
+
 hex
 ( xt -- )
 : set-reset! 0FFFC ! ;
@@ -261,4 +315,19 @@ decimal
   will instead call new. Doesn't replace inlined calls )
 : monkey-patch
   dict::impl + !
+;
+
+( a simple inline which just copies the impl until hitting an rts.
+  It will be confused by any 0x60 byte )
+: [inline] immediate
+  word find >impl
+  1-
+  begin
+    1+ dup
+    c@ dup c,
+    96 =
+  until
+  drop
+  \ undo writing the rts
+  chere @ 1- chere !
 ;
