@@ -331,3 +331,7 @@ decimal
   \ undo writing the rts
   chere @ 1- chere !
 ;
+
+: disas
+
+;

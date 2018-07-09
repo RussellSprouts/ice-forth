@@ -6,7 +6,8 @@ local IO_PORT = 0x401C -- pick a register which is not used on a real NES
 local MEMORY_SIZE = 512 * 1024
 
 local forthCode = io.open('bootstrap.f', 'r')
-local lastLineInput = forthCode:read('*a')
+local forthCode2 = io.open('game.f', 'r')
+local lastLineInput = forthCode:read'*a' .. forthCode2:read'*a'
 
 local trace = false
 

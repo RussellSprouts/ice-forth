@@ -44,7 +44,7 @@ F_INLINE = $40
 .segment "DICT"
 ; Reserve space to push the dictionary to the end of the memory
 ; space, since it now grows down.
-.res $D56
+.res $D43
 
 .segment "ZEROPAGE": zeropage
 TMP1: .res 1
@@ -1177,7 +1177,7 @@ defvar "vhere", VHERE_VALUE+2, VHERE, DODOTQUOTE
 ; Use like:
 ;   jsr DODOTQUOTE
 ;   .asciiz "Some string"
-defword "(.')", 0, DODOTQUOTE, EXECUTE
+defword "(.')", 0, DODOTQUOTE, FETCH_INC
   pla
   sta TMP1
   pla
@@ -1201,6 +1201,68 @@ defword "(.')", 0, DODOTQUOTE, EXECUTE
   lda TMP1
   pha
   rts
+
+; ( addr -- addr+1 c )
+defword "c@1+", 0, FETCH_INC, SEE
+  jsr DUP
+  jsr INCR
+  jsr SWAP
+  jmp CFETCH 
+
+defword "see", 0, SEE, EXECUTE
+  jsr FETCH_INC
+  jsr DUP
+  jsr DOT
+  jsr @instName
+  lda Stack, x
+  and #$1F
+  bne @nonzero
+  lda Stack, x
+  and #%11100000
+  asl
+  rol
+  rol
+  rol
+  tay
+  lda @zeroTable, y
+  bne :+ ; bra
+@nonzero:
+  tay
+  lda @table, y ; fetch instruction length
+: pop
+  cmp #1
+  beq @one
+  cmp #2
+  beq @two
+  bne @three
+
+@one:
+  jmp CR
+
+@two:
+  jsr FETCH_INC
+  jsr DOT
+  jmp CR
+
+@three:
+  jsr DUP
+  jsr FETCH
+  jsr DOT
+  jsr INCR
+  jsr INCR
+  jmp CR
+
+@table: ; Instruction lengths
+.byte 1, 2, 2, 2, 2, 2, 2, 2
+.byte 1, 2, 1, 2, 3, 3, 3, 3
+.byte 2, 2, 2, 2, 2, 2, 2, 2
+.byte 1, 3, 1, 3, 3, 3, 3, 3
+@zeroTable:
+.byte 1, 3, 1, 1, 2, 2, 2, 2
+
+@instName:
+  
+@firstLetter: .byte "
 
 ; Executes the word on the stack.
 defword "execute", 0, EXECUTE, 0
