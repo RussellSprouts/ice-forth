@@ -332,6 +332,19 @@ decimal
   chere @ 1- chere !
 ;
 
-: disas
+( checks if the given address is in the dictionary )
+: in-dict?
 
+;
+
+: disas
+  20
+  begin
+  swap
+  see
+  swap 1-
+  dup 0=
+  until
+  drop
+  drop
 ;

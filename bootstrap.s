@@ -32,7 +32,7 @@
 ; stdin, possibly blocking, since the simulator reads line-by-
 ; line.
 IO_PORT := $401C
-
+.export IO_PORT
 ; Flags for the dictionary entries.
 ; The word should execute immediately even in compile mode
 F_IMMED = $80
@@ -47,6 +47,7 @@ F_INLINE = $40
 .res $D43
 
 .segment "ZEROPAGE": zeropage
+.exportzp TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
 TMP1: .res 1
 TMP2: .res 1
 TMP3: .res 1
@@ -57,6 +58,7 @@ TMP7: .res 1
 TMP8: .res 1
 
 Stack: .res 40
+.exportzp Stack
 Stack_End: .res 8 ; buffer zone
 
 ; A segment for initializing variables.
@@ -133,6 +135,7 @@ RStack: .res $100
 .macro defword name, flags, label, previous
   .segment "DICT"
     label:
+    .export label
     jmp .ident(.concat(.string(label), "_IMPL"))
     ; previous pointer
     .word previous
@@ -1210,59 +1213,8 @@ defword "c@1+", 0, FETCH_INC, SEE
   jmp CFETCH 
 
 defword "see", 0, SEE, EXECUTE
-  jsr FETCH_INC
-  jsr DUP
-  jsr DOT
-  jsr @instName
-  lda Stack, x
-  and #$1F
-  bne @nonzero
-  lda Stack, x
-  and #%11100000
-  asl
-  rol
-  rol
-  rol
-  tay
-  lda @zeroTable, y
-  bne :+ ; bra
-@nonzero:
-  tay
-  lda @table, y ; fetch instruction length
-: pop
-  cmp #1
-  beq @one
-  cmp #2
-  beq @two
-  bne @three
-
-@one:
-  jmp CR
-
-@two:
-  jsr FETCH_INC
-  jsr DOT
-  jmp CR
-
-@three:
-  jsr DUP
-  jsr FETCH
-  jsr DOT
-  jsr INCR
-  jsr INCR
-  jmp CR
-
-@table: ; Instruction lengths
-.byte 1, 2, 2, 2, 2, 2, 2, 2
-.byte 1, 2, 1, 2, 3, 3, 3, 3
-.byte 2, 2, 2, 2, 2, 2, 2, 2
-.byte 1, 3, 1, 3, 3, 3, 3, 3
-@zeroTable:
-.byte 1, 3, 1, 1, 2, 2, 2, 2
-
-@instName:
-  
-@firstLetter: .byte "
+  .import Instruction
+  jmp Instruction
 
 ; Executes the word on the stack.
 defword "execute", 0, EXECUTE, 0
