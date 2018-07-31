@@ -61,6 +61,8 @@ Stack: .res 40
 .exportzp Stack
 Stack_End: .res 8 ; buffer zone
 
+ControlFlowStack: .res 10
+
 ; A segment for initializing variables.
 .segment "VINIT"
 VINIT_START:

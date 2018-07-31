@@ -267,6 +267,8 @@ welcome
 
   ( initialize val )
   !
+
+  [ ['] always-inline literal ] execute drop
 ;
 
 ( Gets the address of a val )
@@ -388,14 +390,3 @@ decimal
   0 lda.i
   stack 1+ sta.zx ]
 ;
-
-: t
-  0 10 do
-    ." LOOK AROUND YOU! "
-  loop
-;
-
-['] t >impl disas
-." And:"
-['] t >impl 28 + disas
-
