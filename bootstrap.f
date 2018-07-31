@@ -32,11 +32,18 @@
 : 2+ 2 + ;
 
 hex
+  \ todo -- integrate the interpreter to autogenerate these rules
   : lda.i 0A9 c, c, ;
   : lda.a 0AD c, , ;
   : sta.a 08D c, , ;
   : lda.zx 0B5 c, c, ;
+  : lda.z  0A5 c, c, ;
   : sta.zx 095 c, c, ;
+  : sta.z 085 c, c, ;
+  : inc.zx 0F6 c, c, ;
+  : inc.z  0E6 c, c, ;
+  : cmp.zx 0D5 c, c, ;
+  : cmp.z  0C5 c, c, ;
   : beq 0F0 c, c, ;
   : bne 0D0 c, c, ;
   : ora.zx 015 c, c, ;
@@ -45,6 +52,8 @@ hex
   : inx;inx 0E8E8 , ;
   : clv;bvc 050B8 , c, ;
   : rts 060 c, ;
+  : pla 068 c, ;
+  : pha 048 c, ;
 
   : debug_start immediate 0FF c, ;
   : debug_end immediate 0FE c, ;
@@ -317,10 +326,7 @@ decimal
   dict::impl + !
 ;
 
-( a simple inline which just copies the impl until hitting an rts.
-  It will be confused by any 0x60 byte )
-: [inline] immediate
-  word find >impl
+: inline,
   1-
   begin
     1+ dup
@@ -332,19 +338,64 @@ decimal
   chere @ 1- chere !
 ;
 
-( checks if the given address is in the dictionary )
-: in-dict?
-
+( a simple inline which just copies the impl until hitting an rts.
+  It will be confused by any 0x60 byte )
+: [inline] immediate
+  word find >impl inline,
 ;
 
 : disas
   20
   begin
-  swap
-  see
-  swap 1-
-  dup 0=
+    swap
+    see
+    swap 1-
+    dup 0=
   until
   drop
   drop
 ;
+
+: do immediate
+  \ inline code to push the loop bound and index onto the return stack
+  [ ['] c>r >impl literal ]
+  dup inline,
+      inline,
+
+  \ save the address of the beginning of the loop
+  chere @
+;
+
+: loop immediate
+  \ inline code to pull the loop bounds from the return stack
+  pla
+  0 sta.z
+  0 inc.z
+  pla
+  0 cmp.z
+  6 beq
+  pha
+  0 lda.z
+  pha
+  chere @ - 2- bne
+;
+
+: i always-inline
+  [ pla
+  dex;dex
+  stack sta.zx
+  pha
+  0 lda.i
+  stack 1+ sta.zx ]
+;
+
+: t
+  0 10 do
+    ." LOOK AROUND YOU! "
+  loop
+;
+
+['] t >impl disas
+." And:"
+['] t >impl 28 + disas
+

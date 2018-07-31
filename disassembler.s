@@ -7,7 +7,7 @@
 .segment "CODE"
 
 .macpack generic
-.import IO_PORT, DUP, FETCH, CFETCH, INCR, SWAP, DOT, DODOTQUOTE
+.import IO_PORT, DUP, FETCH, CFETCH, INCR, SWAP, DOT, DODOTQUOTE, RFIND
 .importzp Stack, TMP1, TMP2, TMP3
 
 .enum mode
@@ -80,14 +80,13 @@
   Y_
 .endenum
 
-message: .byte ".byte ", $22, $0
+message: .byte "(.')", $0A, ".byte ", $22, $0
 
 ; Handles disassembly of DODOTQUOTE, which takes
 ; it's argument in the following code bytes.
 PrintString:
-  jsr DOT ; print the address of DODOTQUOTE
-  lda #$0A ; '\n'
-  sta IO_PORT
+  inx
+  inx
   ldy #0
 @loop:
   lda message, y
@@ -141,6 +140,9 @@ PrintArg:
   jsr INCR
   jsr SWAP
   jsr FETCH
+  ; If the address is DOODOTQUOTE, then this is probably
+  ; a JSR DODOTQUOTE call, so we should check the string
+  ; that comes after it.
   lda Stack, x
   cmp #<DODOTQUOTE
   bne :+
@@ -149,7 +151,32 @@ PrintArg:
   bne :+
   jmp PrintString
 :
-  jmp DOT ; print two bytes
+  jsr RFIND
+  lda Stack, x
+  ora Stack+1, x
+  beq @notInDict
+  lda Stack+2, x
+  sta TMP1
+  lda Stack+3, x
+  sta TMP2
+  lda Stack, x
+  sta TMP3 ; save length in TMP3
+  ldy #0
+@nameLoop:
+  lda (TMP1), y
+  sta IO_PORT
+  iny
+  cpy TMP3
+  bne @nameLoop
+  inx
+  inx
+  inx
+  inx
+  rts
+@notInDict:
+  inx ; drop the zero length 
+  inx
+  jmp DOT ; print just the bytes.
   
 @return:
   rts

@@ -44,7 +44,7 @@ F_INLINE = $40
 .segment "DICT"
 ; Reserve space to push the dictionary to the end of the memory
 ; space, since it now grows down.
-.res $D43
+.res $D13
 
 .segment "ZEROPAGE": zeropage
 .exportzp TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
@@ -90,6 +90,13 @@ RStack: .res $100
   sta TMP1
   lda Stack+1, x
   sta TMP2
+.endmacro
+
+.macro fromTMP1
+  lda TMP1
+  sta Stack, x
+  lda TMP2
+  sta Stack+1, x
 .endmacro
 
 ; The structure of a dictionary entry.
@@ -193,7 +200,7 @@ defconst "dict::len", DictEntry::Len, DictEntryLen, DictEntryName
 defconst "dict::name", DictEntry::Name, DictEntryName, DROP
 
 ; ( a -- )
-defword "drop", 0, DROP, SWAP
+defword "drop", F_INLINE, DROP, SWAP
   pop
   rts
 
@@ -488,7 +495,22 @@ defword "c@", 0, CFETCH, CMOVE
 ; ( ptr1 ptr2 n -- )
 defword "cmove", 0, CMOVE, VERSION
 
-defconst "version", 1, VERSION, TOR
+defconst "version", 1, VERSION, C_TOR
+
+defword "c>r", F_INLINE, C_TOR, C_FROMR
+  lda Stack, x
+  pha
+  pop
+  rts
+
+defword "cr>", F_INLINE, C_FROMR, TOR
+  dex
+  dex
+  pla
+  sta Stack, x
+  lda #0
+  sta Stack+1, x
+  rts
 
 defword ">r", 0, TOR, FROMR
   ; Store return pointer temporarily.
@@ -705,7 +727,7 @@ defvarzp "latest", DictEntryCodePtr, LATEST, FIND
 ; ( str-ptr len -- dictionary-pointer )
 ; or ( str-ptr len -- str-ptr len 0 ) if it wasn't found
 ; Searches the dictionary for a definition of the given word.
-defword "find", 0, FIND, CHERE
+defword "find", 0, FIND, RFIND
 
   LPointer := TMP1
   MyStr := TMP3
@@ -776,6 +798,64 @@ defword "find", 0, FIND, CHERE
   lda LPointer
   sta Stack, x
   lda LPointer+1
+  sta Stack+1, x
+  rts
+
+; Given a pointer, gets the name of the dictionary entry,
+; or an empty string if it's not in the dictionary.
+; ( addr -- addr len )
+defword "rfind", 0, RFIND, CHERE
+  @LPointer := TMP1
+
+  lda LATEST_VALUE
+  sta @LPointer
+  lda LATEST_VALUE+1
+  sta @LPointer+1
+
+@loop:
+  lda @LPointer
+  cmp Stack, x
+  bne @ne
+  lda @LPointer+1
+  cmp Stack+1, x
+  bne @ne
+  ; We've found the dictionary entry, now return the string.
+  ldy #DictEntry::Len
+  lda (@LPointer), y
+  and #$1F ; mask just the length, no flags.
+  dex
+  dex
+  sta Stack, x
+  lda #0
+  sta Stack+1, x
+  lda @LPointer
+  clc
+  adc #DictEntry::Name
+  sta Stack+2, x
+  lda @LPointer+1
+  adc #0
+  sta Stack+3, x
+  rts
+@ne:
+  ldy #DictEntry::PreviousPtr
+  lda (@LPointer), y
+  pha
+    iny
+    lda (@LPointer), y
+    sta @LPointer+1
+  pla
+  sta @LPointer ; follow the link to the next.
+  lda @LPointer
+  ora @LPointer+1
+  beq @notFound
+  sec
+  bcs @loop ; bra
+@notFound:
+  ; Didn't find anything, so return 0 len string and the original address.
+  dex
+  dex
+  lda #0
+  sta Stack, x
   sta Stack+1, x
   rts
 
@@ -943,9 +1023,16 @@ defword ";", F_IMMED, SEMICOLON, IMMEDIATE
   jsr HIDDEN ; toggle hidden flag
   jmp LSQUARE ; go back to immediate mode
 
-defword "immediate", F_IMMED, IMMEDIATE, HIDDEN
+defword "immediate", F_IMMED, IMMEDIATE, ALWAYS_INLINE
   ldy #(DictEntry::Len)
   lda #F_IMMED
+  eor (LATEST_VALUE), y
+  sta (LATEST_VALUE), y
+  rts
+
+defword "always-inline", F_IMMED, ALWAYS_INLINE, HIDDEN
+  ldy #(DictEntry::Len)
+  lda #F_INLINE
   eor (LATEST_VALUE), y
   sta (LATEST_VALUE), y
   rts
@@ -1010,27 +1097,45 @@ defword "interpret", 0, INTERPRET, CHAR
   lda STATE_VALUE
   beq @execute
 @compiling:
+  lda (TMP1), y
+  and #F_INLINE
+  bne @inline
   push JSR_OP
   jsr CCOMMA
   
-  ldy #(DictEntry::CodePtr)
-  lda (TMP1), y
-  sta Stack, x
-  iny
-  lda (TMP1), y
-  sta Stack+1, x
+  fromTMP1
   jsr COMMA
+  rts
+
+@inline: ; simple inlining -- just copy until you see an rts.
+  ; dict::code + @
+  push DictEntry::CodePtr
+  jsr ADD
+  jsr FETCH
+  toTMP1
+  pop
+  ldy #0
+@loop:
+  lda (TMP1), y
+  cmp #$60 ; if it's an RTS instruction
+  beq @return
+  dex
+  dex
+  sta Stack, x
+  lda #0
+  sta Stack+1, x
+  tya
+  pha
+  jsr CCOMMA ; write the next byte
+  pla
+  tay
+  iny
+  bne @loop ; bra 
   rts
 
 @execute:
   pop ; drop dictionary pointer
-  ldy #(DictEntry::CodePtr)
-  lda (TMP1), y
-  sta TMP3
-  iny
-  lda (TMP1), y
-  sta TMP4
-  jmp (TMP3) ; tailcall to the word, which will return to QUIT
+  jmp (TMP1) ; tailcall to the word, which will return to QUIT
 
 @notFound:
   pop ; drop 0 error
@@ -1059,6 +1164,7 @@ defword "interpret", 0, INTERPRET, CHAR
   jsr COMMA ; compile sta Stack+1, x
   rts
 @executeLiteral:
+@return:
   rts
 
 @nan:
