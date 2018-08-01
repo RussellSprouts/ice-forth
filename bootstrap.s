@@ -26,6 +26,8 @@
 ; - The words are relocatable. The entry point for each word is the same
 ; as the dictionary entry.
 
+.macpack generic
+
 ; The simulator uses this address as the IO port.
 ; A write to this address will output that character
 ; to stdout, and a read will read the next character from
@@ -105,8 +107,7 @@ RStack: .res $100
 .struct DictEntry
   Jmp .byte
   CodePtr .word
-  ; The pointer to the previous dictionary entry.
-  PreviousPtr .word
+  Flags2 .byte
   ; The length of the name. Also includes the flags
   Len .byte
   ; The entry name
@@ -141,14 +142,13 @@ RStack: .res $100
 ; The dictionary entry length does not change - once it is created
 ; with a name, it is fixed. However, we can update the jmp CODE_IMPL
 ; instruction to move the code around.
-.macro defword name, flags, label, previous
+.macro defword name, flags, label
   .segment "DICT"
     label:
     .export label
     jmp .ident(.concat(.string(label), "_IMPL"))
-    ; previous pointer
-    .word previous
     ; length and name
+    .byte 0
     .byte .strlen(name) | flags
     .byte name
   .segment "DICT_CODE"
@@ -162,8 +162,8 @@ RStack: .res $100
 ; so we also put an entry in VINIT, which consists of the
 ; address of the variable and the initial value. On reset,
 ; the code reads those entries and initializes all of them.
-.macro defvar name, init, label, previous
-  defword name, 0, label, previous
+.macro defvar name, init, label
+  defword name, 0, label
     push .ident(.concat(.string(label), "_VALUE"))
     rts
   .segment "VARIABLES"
@@ -176,8 +176,8 @@ RStack: .res $100
 
 ; The same as a variable, except it is allocated in the zero
 ; page.
-.macro defvarzp name, init, label, previous
-  defword name, 0, label, previous
+.macro defvarzp name, init, label
+  defword name, 0, label
     push .ident(.concat(.string(label), "_VALUE"))
     rts
   .segment "ZEROPAGE": zeropage
@@ -190,24 +190,23 @@ RStack: .res $100
 
 ; A constant is a word which pushes its value onto the stack
 ; when it is executed.
-.macro defconst name, value, label, previous
-  defword name, 0, label, previous
+.macro defconst name, value, label
+  defword name, 0, label
     push value
     rts
 .endmacro
 
-defconst "dict::impl", DictEntry::CodePtr, DictEntryCodePtr, DictEntryPreviousPtr
-defconst "dict::prev", DictEntry::PreviousPtr, DictEntryPreviousPtr, DictEntryLen
-defconst "dict::len", DictEntry::Len, DictEntryLen, DictEntryName
-defconst "dict::name", DictEntry::Name, DictEntryName, DROP
+defconst "dict::impl", DictEntry::CodePtr, DictEntryCodePtr
+defconst "dict::len", DictEntry::Len, DictEntryLen
+defconst "dict::name", DictEntry::Name, DictEntryName
 
 ; ( a -- )
-defword "drop", F_INLINE, DROP, SWAP
+defword "drop", F_INLINE, DROP
   pop
   rts
 
 ; ( a b -- b a )
-defword "swap", 0, SWAP, DUP
+defword "swap", 0, SWAP
   lda Stack, x
   ldy Stack+2, x
   sty Stack, x
@@ -219,7 +218,7 @@ defword "swap", 0, SWAP, DUP
   rts
 
 ; ( a -- a a )
-defword "dup", 0, DUP, OVER
+defword "dup", 0, DUP
   dex
   dex
   lda Stack+2, x
@@ -229,7 +228,7 @@ defword "dup", 0, DUP, OVER
   rts
 
 ; ( a b -- a b a )
-defword "over", 0, OVER, ROT
+defword "over", 0, OVER
   dex
   dex
   lda Stack+4, x
@@ -238,7 +237,7 @@ defword "over", 0, OVER, ROT
   sta Stack+1, x
 
 ; ( a b c -- b c a )
-defword "rot", 0, ROT, QDUP
+defword "rot", 0, ROT
   lda Stack, x
   pha
   ldy Stack+2, x
@@ -258,7 +257,7 @@ defword "rot", 0, ROT, QDUP
   rts
 
 ; ( a -- a a | 0 )
-defword "?dup", 0, QDUP, INCR
+defword "?dup", 0, QDUP
   lda Stack, x
   ora Stack+1, x
   beq @done
@@ -267,7 +266,7 @@ defword "?dup", 0, QDUP, INCR
   rts
 
 ; ( a -- a + 1 )
-defword "1+", 0, INCR, DECR
+defword "1+", 0, INCR
   inc Stack, x
   beq @hi
   rts
@@ -275,7 +274,7 @@ defword "1+", 0, INCR, DECR
   inc Stack+1, x
   rts
 
-defword "1-", 0, DECR, ADD
+defword "1-", 0, DECR
   sec
   lda Stack, x
   sbc #1
@@ -285,7 +284,7 @@ defword "1-", 0, DECR, ADD
   sta Stack+1, x
   rts
 
-defword "+", 0, ADD, SUB
+defword "+", 0, ADD
   clc
   lda Stack, x
   adc Stack+2, x
@@ -296,7 +295,7 @@ defword "+", 0, ADD, SUB
   pop
   rts
 
-defword "-", 0, SUB, EQU
+defword "-", 0, SUB
   sec
   lda Stack+2, x
   sbc Stack, x
@@ -307,7 +306,7 @@ defword "-", 0, SUB, EQU
   pop
   rts
 
-defword "=", 0, EQU, NEQU
+defword "=", 0, EQU
   pop
   lda Stack-2, x
   cmp Stack, x
@@ -327,7 +326,7 @@ defword "=", 0, EQU, NEQU
   sty Stack+1, x
   rts
 
-defword "<>", 0, NEQU, ZEQU
+defword "<>", 0, NEQU
   pop
   lda Stack-2, x
   cmp Stack, x
@@ -347,7 +346,7 @@ defword "<>", 0, NEQU, ZEQU
   sty Stack+1, x
   rts 
 
-defword "0=", 0, ZEQU, ZGT
+defword "0=", 0, ZEQU
   ldy #0
   lda Stack, x
   ora Stack+1, x
@@ -358,7 +357,7 @@ defword "0=", 0, ZEQU, ZGT
   sty Stack+1, x
   rts
 
-defword "0>", 0, ZGT, AND_
+defword "0>", 0, ZGT
   lda Stack+1, x
   ldy #0
   bmi @minus
@@ -368,7 +367,7 @@ defword "0>", 0, ZGT, AND_
   sty Stack+1, x
   rts
 
-defword "and", 0, AND_, OR
+defword "and", 0, AND_
   lda Stack, x
   and Stack+2, x
   sta Stack+2, x
@@ -378,7 +377,7 @@ defword "and", 0, AND_, OR
   pop
   rts
 
-defword "or", 0, OR, XOR
+defword "or", 0, OR
   lda Stack, x
   ora Stack+2, x
   sta Stack+2, x
@@ -388,7 +387,7 @@ defword "or", 0, OR, XOR
   pop
   rts
 
-defword "xor", 0, XOR, ASL_
+defword "xor", 0, XOR
   lda Stack, x
   eor Stack+2, x
   sta Stack+2, x
@@ -398,17 +397,17 @@ defword "xor", 0, XOR, ASL_
   pop
   rts
 
-defword "asl", 0, ASL_, LSR_
+defword "asl", 0, ASL_
   asl Stack, x
   rol Stack+1, x
   rts
 
-defword "lsr", 0, LSR_, INVERT
+defword "lsr", 0, LSR_
   lsr Stack+1, x
   ror Stack, x
   rts
 
-defword "invert", 0, INVERT, STORE
+defword "invert", 0, INVERT
   lda Stack, x
   eor #$FF
   sta Stack, x
@@ -421,7 +420,7 @@ DEX_OP = $CA
 LDA_IMM_OP = $A9
 STA_ZP_X_OP = $95
 
-defword "!", 0, STORE, ADDSTORE
+defword "!", 0, STORE
   toTMP1
   ldy #0
   lda Stack+2, x
@@ -433,7 +432,7 @@ defword "!", 0, STORE, ADDSTORE
   pop
   rts
 
-defword "+!", 0, ADDSTORE, SUBSTORE
+defword "+!", 0, ADDSTORE
   toTMP1
   
   ldy #0
@@ -451,7 +450,7 @@ defword "+!", 0, ADDSTORE, SUBSTORE
   pop
   rts
 
-defword "-!", 0, SUBSTORE, CSTORE
+defword "-!", 0, SUBSTORE
   toTMP1
   
   ldy #0
@@ -469,14 +468,14 @@ defword "-!", 0, SUBSTORE, CSTORE
   pop
   rts
 
-defword "c!", 0, CSTORE, FETCH
+defword "c!", 0, CSTORE
   lda Stack+2, x
   sta (Stack, x)
   pop
   pop
   rts
 
-defword "@", 0, FETCH, CFETCH
+defword "@", 0, FETCH
   toTMP1
 
   ldy #0
@@ -487,7 +486,7 @@ defword "@", 0, FETCH, CFETCH
   sta Stack+1, x
   rts
 
-defword "c@", 0, CFETCH, CMOVE
+defword "c@", 0, CFETCH
   lda (Stack, x)
   sta Stack, x
   lda #0
@@ -495,17 +494,17 @@ defword "c@", 0, CFETCH, CMOVE
   rts
 
 ; ( ptr1 ptr2 n -- )
-defword "cmove", 0, CMOVE, VERSION
+defword "cmove", 0, CMOVE
 
-defconst "version", 1, VERSION, C_TOR
+defconst "version", 1, VERSION
 
-defword "c>r", F_INLINE, C_TOR, C_FROMR
+defword "c>r", F_INLINE, C_TOR
   lda Stack, x
   pha
   pop
   rts
 
-defword "cr>", F_INLINE, C_FROMR, TOR
+defword "cr>", F_INLINE, C_FROMR
   dex
   dex
   pla
@@ -514,7 +513,7 @@ defword "cr>", F_INLINE, C_FROMR, TOR
   sta Stack+1, x
   rts
 
-defword ">r", 0, TOR, FROMR
+defword ">r", 0, TOR
   ; Store return pointer temporarily.
   pla
   sta TMP1
@@ -535,7 +534,7 @@ defword ">r", 0, TOR, FROMR
   pop
   rts
 
-defword "r>", 0, FROMR, RDROP
+defword "r>", 0, FROMR
   ; Store return pointer temporarily
   pla
   sta TMP1
@@ -557,12 +556,12 @@ defword "r>", 0, FROMR, RDROP
   
   rts
 
-defword "rdrop", 0, RDROP, DSPFETCH
+defword "rdrop", 0, RDROP
   pla
   pla
   rts
 
-defword "dsp@", 0, DSPFETCH, DSPSTORE
+defword "dsp@", 0, DSPFETCH
   dex
   dex
   txa
@@ -571,18 +570,18 @@ defword "dsp@", 0, DSPFETCH, DSPSTORE
   sty Stack+1, x
   rts
 
-defword "dsp!", 0, DSPSTORE, EMIT
+defword "dsp!", 0, DSPSTORE
   lda Stack, x
   tax
   rts
 
-defword "emit", 0, EMIT, KEY
+defword "emit", 0, EMIT
   lda Stack, x
   sta IO_PORT
   pop
   rts
 
-defword "key", 0, KEY, WORD
+defword "key", 0, KEY
   dex
   dex
   lda IO_PORT
@@ -592,7 +591,7 @@ defword "key", 0, KEY, WORD
   rts
 
 ; ( -- str-ptr len )
-defword "word", 0, WORD, BASE
+defword "word", 0, WORD
   lda #0
   sta TMP1
   jsr KEY
@@ -633,12 +632,12 @@ defword "word", 0, WORD, BASE
 .segment "VARIABLES"
   @word_buffer: .res 32
 
-defvar "base", 10, BASE, NUMBER
+defvar "base", 10, BASE
 
 ; ( str len -- parsed-number )
 ; or ( str len -- str len 0 ) on error
 ; Also, carry is set if there's an error.
-defword "number", 0, NUMBER, LATEST
+defword "number", 0, NUMBER
 
   Str := TMP1
   Result := TMP3
@@ -724,12 +723,12 @@ defword "number", 0, NUMBER, LATEST
   sec ; signal the error
   rts
 
-defvarzp "latest", DictEntryCodePtr, LATEST, FIND
+defvarzp "latest", DictEntryCodePtr, LATEST
 
 ; ( str-ptr len -- dictionary-pointer )
 ; or ( str-ptr len -- str-ptr len 0 ) if it wasn't found
 ; Searches the dictionary for a definition of the given word.
-defword "find", 0, FIND, RFIND
+defword "find", 0, FIND
 
   LPointer := TMP1
   MyStr := TMP3
@@ -773,20 +772,32 @@ defword "find", 0, FIND, RFIND
   bne @strcmpLoop ; bra
 
 @next:
-  ldy #(DictEntry::PreviousPtr+1)
-  lda (LPointer), y
-  pha
-  dey
-  lda (LPointer), y
-  sta LPointer
-  pla
-  sta LPointer+1 ; follow the link and store in Current.
 
-  ; Check if current is now the null pointer.
+  ldy #(DictEntry::Len)
+  lda (LPointer), y
+  and #$1F ; TODO - magic constant
+  clc
+  adc LPointer
+  sta LPointer
+  lda #0
+  adc LPointer + 1
+  sta LPointer + 1 ; add string length to LPointer
+
+  lda #DictEntry::Name
+  clc
+  adc LPointer
+  sta LPointer
+  lda #0
+  adc LPointer + 1
+  sta LPointer + 1 ; add the other bytes of the header.
+
+  ; Check if current is past the end.
+  lda LPointer + 1
+  cmp #>EXECUTE ; execute is last in the dictionary.
+  blt @loop
   lda LPointer
-  ora LPointer+1
-  beq @notFound
-  bne @loop
+  cmp #<EXECUTE
+  ble @loop
 
 @notFound:
   dex
@@ -806,7 +817,7 @@ defword "find", 0, FIND, RFIND
 ; Given a pointer, gets the name of the dictionary entry,
 ; or an empty string if it's not in the dictionary.
 ; ( addr -- addr len )
-defword "rfind", 0, RFIND, CHERE
+defword "rfind", 0, RFIND
   @LPointer := TMP1
 
   lda LATEST_VALUE
@@ -839,19 +850,31 @@ defword "rfind", 0, RFIND, CHERE
   sta Stack+3, x
   rts
 @ne:
-  ldy #DictEntry::PreviousPtr
+  ldy #DictEntry::Len
   lda (@LPointer), y
-  pha
-    iny
-    lda (@LPointer), y
-    sta @LPointer+1
-  pla
-  sta @LPointer ; follow the link to the next.
+  and #31 ; TODO - magic number
+  clc
+  adc @LPointer
+  sta @LPointer
+  lda #0
+  adc @LPointer+1
+  sta @LPointer+1
+
+  lda #DictEntry::Name
+  clc
+  adc @LPointer
+  sta @LPointer
+  lda #0
+  adc @LPointer+1
+  sta @LPointer+1
+
+  lda @LPointer+1
+  cmp #>EXECUTE
+  blt @loop
   lda @LPointer
-  ora @LPointer+1
-  beq @notFound
-  sec
-  bcs @loop ; bra
+  cmp #<EXECUTE
+  beq @loop
+  blt @loop
 @notFound:
   ; Didn't find anything, so return 0 len string and the original address.
   dex
@@ -863,19 +886,19 @@ defword "rfind", 0, RFIND, CHERE
 
 ; Code Here pointer
 ; Points to the next free byte in the code area.
-defvarzp "chere", CHERE_INIT, CHERE, DHERE
+defvarzp "chere", CHERE_INIT, CHERE
 
 ; Dictionary Here pointer
 ; The dictionary grows downward, so this points to the
 ; first used byte in dictionary memory.
 ; This must be initialized to the first dict entry.
-defvarzp "dhere", DictEntryCodePtr, DHERE, CREATE
+defvarzp "dhere", DictEntryCodePtr, DHERE
 
 JMP_OP = $4C
 
 ; ( str-ptr len -- )
 ; Creates a new dictionary entry
-defword "create", 0, CREATE, COMMA
+defword "create", 0, CREATE
   ; The dict entry needs str-len + DictEntry::Name bytes of space.
   ; Subtract from DHERE to allocate the space.
   jsr DUP ; str length
@@ -890,13 +913,13 @@ defword "create", 0, CREATE, COMMA
 
   ; Set the new entry's previous pointer
   ; LATEST @ DHERE @ PreviousPtr + !
-  jsr LATEST
-  jsr FETCH
-  jsr DHERE
-  jsr FETCH
-  push DictEntry::PreviousPtr
-  jsr ADD
-  jsr STORE
+  ; jsr LATEST
+  ; jsr FETCH
+  ; jsr DHERE
+  ; jsr FETCH
+  ; push DictEntry::PreviousPtr
+  ; jsr ADD
+  ; jsr STORE
 
   ; Update LATEST to the new entry
   ; DHERE @ LATEST !
@@ -961,7 +984,7 @@ defword "create", 0, CREATE, COMMA
   pop
   rts
 
-defword ",", 0, COMMA, CCOMMA
+defword ",", 0, COMMA
   ldy #0
   lda Stack, x
   sta (CHERE_VALUE), y
@@ -979,7 +1002,7 @@ defword ",", 0, COMMA, CCOMMA
   pop
   rts
 
-defword "c,", 0, CCOMMA, STATE
+defword "c,", 0, CCOMMA
   lda Stack, x
   ldy #0
   sta (CHERE_VALUE), y
@@ -991,22 +1014,22 @@ defword "c,", 0, CCOMMA, STATE
   pop
   rts
 
-defvar "state", 0, STATE, LSQUARE
+defvar "state", 0, STATE
 
-defword "[", F_IMMED, LSQUARE, RSQUARE
+defword "[", F_IMMED, LSQUARE
   lda #0
   sta STATE_VALUE
   sta STATE_VALUE+1
   rts
 
-defword "]", 0, RSQUARE, COLON
+defword "]", 0, RSQUARE
   lda #1
   sta STATE_VALUE
   lda #0
   sta STATE_VALUE+1
   rts
 
-defword ":", 0, COLON, SEMICOLON
+defword ":", 0, COLON
   jsr WORD
   jsr CREATE ; create the dictionary entry
   jsr LATEST
@@ -1016,7 +1039,7 @@ defword ":", 0, COLON, SEMICOLON
 
 RTS_OP = $60
 
-defword ";", F_IMMED, SEMICOLON, IMMEDIATE
+defword ";", F_IMMED, SEMICOLON
   push RTS_OP
   jsr CCOMMA ; append rts to code
 
@@ -1025,14 +1048,14 @@ defword ";", F_IMMED, SEMICOLON, IMMEDIATE
   jsr HIDDEN ; toggle hidden flag
   jmp LSQUARE ; go back to immediate mode
 
-defword "immediate", F_IMMED, IMMEDIATE, ALWAYS_INLINE
+defword "immediate", F_IMMED, IMMEDIATE
   ldy #(DictEntry::Len)
   lda #F_IMMED
   eor (LATEST_VALUE), y
   sta (LATEST_VALUE), y
   rts
 
-defword "always-inline", F_IMMED, ALWAYS_INLINE, HIDDEN
+defword "always-inline", F_IMMED, ALWAYS_INLINE
   ldy #(DictEntry::Len)
   lda #F_INLINE
   eor (LATEST_VALUE), y
@@ -1041,7 +1064,7 @@ defword "always-inline", F_IMMED, ALWAYS_INLINE, HIDDEN
 
 ; ( dict-ptr -- )
 ; Marks the dictionary entry as hidden
-defword "hidden", 0, HIDDEN, HIDE
+defword "hidden", 0, HIDDEN
   toTMP1
 
   ldy #(DictEntry::Len)
@@ -1052,12 +1075,12 @@ defword "hidden", 0, HIDDEN, HIDE
   pop
   rts
 
-defword "hide", 0, HIDE, TICK
+defword "hide", 0, HIDE
   jsr WORD
   jsr FIND
   jmp HIDDEN
 
-defword "[']", 0, TICK, QUIT
+defword "[']", 0, TICK
   jsr WORD
   jmp FIND
 
@@ -1067,7 +1090,7 @@ BVC_OP = $50
 BEQ_OP = $F0
 JSR_OP = $20
 
-defword "quit", 0, QUIT, INTERPRET
+defword "quit", 0, QUIT
   stx TMP1
     cpx #Stack_End
     bcs @underflow
@@ -1082,7 +1105,7 @@ defword "quit", 0, QUIT, INTERPRET
   ldx #Stack_End-1
   jmp QUIT
 
-defword "interpret", 0, INTERPRET, CHAR
+defword "interpret", 0, INTERPRET
   jsr WORD
   jsr FIND
   lda Stack, x
@@ -1199,7 +1222,7 @@ defword "interpret", 0, INTERPRET, CHAR
 @errorMessage:
   .byte $A, "ERROR: Couldn't find word: ", 0
 
-defword "char", 0, CHAR, DOT
+defword "char", 0, CHAR
   jsr WORD
   pop
   lda (Stack, x)
@@ -1208,7 +1231,7 @@ defword "char", 0, CHAR, DOT
   sta Stack+1, x
   rts
 
-defword ".", 0, DOT, DOT_S
+defword ".", 0, DOT
   ; Set the V flag. While v is set, we will skip
   ; leading 0s. Once we see a digit which is non-zero, clv.
   bit @setV
@@ -1255,7 +1278,7 @@ defword ".", 0, DOT, DOT_S
 
 HexDigits: .byte "0123456789ABCDEF"
 
-defword ".s", 0, DOT_S, CR
+defword ".s", 0, DOT_S
   txa
   cmp #Stack_End - 1
   beq @done
@@ -1264,31 +1287,31 @@ defword ".s", 0, DOT_S, CR
 @done:
   rts
 
-defword "cr", 0, CR, HI
+defword "cr", 0, CR
   lda #10
   sta IO_PORT
   rts
 
-defword ">byte", 0, HI, LO
+defword ">byte", 0, HI
   lda Stack+1, x
   sta Stack, x
   lda #0
   sta Stack+1, x
   rts
 
-defword "<byte", 0, LO, VHERE
+defword "<byte", 0, LO
   lda #0
   sta Stack+1, x
   rts
 
 ; Variable which points to the next free variable RAM space.
-defvar "vhere", VHERE_VALUE+2, VHERE, DODOTQUOTE
+defvar "vhere", VHERE_VALUE+2, VHERE
 
 ; Prints out the following bytes as a zero-terminated string.
 ; Use like:
 ;   jsr DODOTQUOTE
 ;   .asciiz "Some string"
-defword "(.')", 0, DODOTQUOTE, FETCH_INC
+defword "(.')", 0, DODOTQUOTE
   pla
   sta TMP1
   pla
@@ -1314,18 +1337,18 @@ defword "(.')", 0, DODOTQUOTE, FETCH_INC
   rts
 
 ; ( addr -- addr+1 c )
-defword "c@1+", 0, FETCH_INC, SEE
+defword "c@1+", 0, FETCH_INC
   jsr DUP
   jsr INCR
   jsr SWAP
   jmp CFETCH 
 
-defword "see", 0, SEE, EXECUTE
+defword "see", 0, SEE
   .import Instruction
   jmp Instruction
 
 ; Executes the word on the stack.
-defword "execute", 0, EXECUTE, 0
+defword "execute", 0, EXECUTE
   toTMP1
   jmp (TMP1)
 

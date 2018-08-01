@@ -199,6 +199,16 @@ decimal
   128 and
 ;
 
+( Returns the next dictionary entry. Assumes execute is the last )
+: next
+  dup [ ['] execute literal ] = if
+    drop
+    0
+  else
+    dup dict::len + c@ 63 and + dict::name +
+  then
+;
+
 : words
   latest @ ( read latest entry )
   begin
@@ -206,7 +216,7 @@ decimal
       dup id.
       space
     then
-    dict::prev + @ ( read previous pointer )
+    next
     dup 0=
   until
   drop ( drop null pointer )
