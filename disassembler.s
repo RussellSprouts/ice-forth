@@ -1,32 +1,33 @@
 ; -----------------------------------------------
 ; Implements a self-hosting 6502 disassembler
 ; It's a very basic one-pass disassembler.
-; It will
 ; -----------------------------------------------
 
 .segment "CODE"
 
 .macpack generic
 .import IO_PORT, DUP, FETCH, CFETCH, INCR, SWAP, DOT, DODOTQUOTE, RFIND
-.importzp Stack, TMP1, TMP2, TMP3
+.importzp Stack, TMP1, TMP2, TMP3, TMP4
 
 .enum mode
   impl = 0 ; no args
-
+  acc = $10 ; no args, accumulator
+  
   ; 1 byte arg
-  imm = $10
-  rel = $20
-  indx = $30
-  indy = $40
-  zpg = $50
-  zpgx = $60
-  zpgy = $70
+  imm = $20
+  rel = $30
+  indx = $40
+  indy = $50
+  zpg = $60
+  zpgx = $70
+  zpgy = $80
 
   ; 2 byte arg
-  ind = $80
-  abs = $90
-  absx = $A0
-  absy = $B0
+  ind = $90
+  abs = $A0
+  absx = $B0
+  absy = $C0
+
 .endenum
 .enum l1
   A_
@@ -122,14 +123,13 @@ PrintString:
 ; Prints the argument with the IP at the top of the stack,
 ; and a as the addressing mode, and returns the new IP.
 PrintArg:
-  cmp #0
-  beq @return
+  cmp #$1
+  ble @return ; no arg implied or accumulator instruction
   pha
-  jsr DUP
+    jsr DUP
   pla
-  cmp #$8
-  bge @two ; modes >= $80 are two byte modes.
-  
+  cmp #$9
+  bge @two ; modes >= $9 are two byte modes. 
 @one:
   jsr INCR
   jsr SWAP
@@ -181,6 +181,202 @@ PrintArg:
 @return:
   rts
 
+LetterIndicesLo:
+  .byte <FirstLetter, <SecondLetter, <ThirdLetter
+LetterIndicesHi:
+  .byte >FirstLetter, >SecondLetter, >ThirdLetter
+
+; Given a zero-terminated string address in TMP1-2, parses the string as
+; an instruction, returning the number of bytes of it takes up and the
+; instruction number.
+.export ParseInstruction
+ParseInstruction:
+  ldy #0
+@instructionLoop:
+  lda LetterIndicesLo, y
+  sta TMP3
+  lda LetterIndicesHi, y
+  sta TMP4
+  tya
+  pha
+    lda (TMP1), y
+    bze @badLetter
+    jsr ParseLetter
+    bmi @badLetter
+    dex
+    sty Stack, x ; temporarily save on stack.
+  pla
+  tay
+  iny
+  cpy #3
+  bne @instructionLoop
+
+  ; now the three bytes on the stack are the three letter indices.
+  lda (TMP1), y
+  beq @noTail
+  cmp #'.'
+  bne @notDot
+  iny
+  lda (TMP1), y ; get first letter of tail
+  dex
+  sta Stack, x ; store on stack
+  iny
+  lda (TMP1), y ; get second letter of tail
+  dex
+  sta Stack, x ; store on stack
+
+@findMode:
+  ldy #0
+@findModeLoop:
+  lda ModeBeg2, y
+  cmp Stack, x
+  bne :+
+    lda ModeBeg, y
+    cmp Stack+1, x
+    bne :+
+    sty Stack+1, x
+    inx ; put mode number on the stack.
+    bne @foundAll ; bra
+  :
+  iny
+  cpy #13
+  bne @findModeLoop ; bra
+@badMode:
+  lda #5
+  pha
+  ; fall-through
+@badLetter:
+  pla ; get saved y value.
+  tay
+  ; discard stack values.
+  cpy #0
+  beq @discardDone
+@discardLoop:
+  inx
+  dey
+  bne @discardLoop
+@discardDone:
+@notDot:
+  lda #0
+  dex
+  dex
+  sta Stack, x
+  sta Stack+1, x
+  rts
+@noTail:
+  ; The three bytes bytes on the stack represent the letter indices,
+  ; and the mode is either implied, relative, or absolute.
+  dex
+  lda #0
+  sta Stack, x
+  jsr CompactStack
+
+  ldy #0
+@noTailLoop:
+  lda Instructions, y
+  cmp Stack+1, x
+  bne :+
+    lda Instructions_end, y
+    and #$F0
+    cmp #mode::impl
+    beq @ok
+    cmp #mode::rel
+    beq @ok
+    cmp #mode::abs
+    beq @ok
+    bne :+
+  @ok:
+    lda Instructions_end, y
+    and #$F
+    cmp Stack, x
+    bne :+
+    ; Found the instruction!
+    beq @success
+  :
+  iny
+  cpy #192
+  bne @noTailLoop
+@pushError:
+  lda #0
+  sta Stack, x
+  sta Stack+1, x
+  rts
+
+@foundAll:
+  ; The four bytes on the stack represent the letter indices
+  ; and the mode.
+  jsr CompactStack
+  ldy #0
+@foundAllLoop:
+  lda Instructions, y
+  cmp Stack+1, x
+  bne :+
+    lda Instructions_end, y
+    cmp Stack, x
+    bne :+
+    ; Found the instruction!
+    beq @success
+  :
+  iny
+  cpy #192
+  bne @foundAllLoop
+  beq @pushError
+
+@success:
+  ; y is the instruction.
+  sty Stack, x
+  lda #0
+  sta Stack+1, x
+
+  dex
+  dex
+  lda #0
+  sta Stack+1, x
+  lda Instructions_end, y
+  lsr
+  lsr
+  lsr
+  lsr
+  cmp #1
+  ble @one
+  cmp #9
+  bge @three
+@two:
+  lda #2
+  sta Stack, x
+  rts
+@one:
+  lda #1
+  sta Stack, x
+  rts
+@three:
+  lda #3
+  sta Stack, x
+  rts
+
+CompactStack:
+  ; Given four bytes on the stack are l1 l2 l3 m.
+  ; Compact it to two bytes as 21 m3, one nibble
+  ; for each.
+  lda Stack+2, x
+  asl
+  asl
+  asl
+  asl
+  ora Stack+3, x
+  sta Stack+3, x
+
+  lda Stack, x
+  asl
+  asl
+  asl
+  asl
+  ora Stack+1, x
+  sta Stack+2, x
+  inx
+  inx
+  rts
+
 Illegal:
   lda #'*'
   sta IO_PORT ; print *
@@ -188,6 +384,41 @@ Illegal:
   lda #$0A ; '\n'
   sta IO_PORT
   rts
+
+; Given a list of up to 16 letters in TMP3-4,
+; and a letter in A, returns the index of
+; the letter in y. If not found, returns -1
+ParseLetter:
+  ldy #0
+@loop:
+  cmp (TMP3), y
+  beq @found
+  iny
+  cpy #16
+  bne @loop
+  ldy #$FF
+@found:
+  rts
+
+; Letters used in the instruction names.
+; We can only support up to 16 of each,
+; so that they can be referenced with
+; 4 bits. Pad with a.
+FirstLetter:  .byte "abcdeijlnoprst"
+SecondLetter: .byte "abcdehilmnoprstv"
+ThirdLetter:  .byte "acdeiklpqrstvxya" ; pad end to 16 characters with a
+
+; After printing the instruction,
+; print these characters, based on the mode.
+; A zero means to print nothing.
+; If the first character is non-zero, print a '.' to
+; separate the mode from the instruction.
+ModeBeg:
+  .byte 0, 'a', '#', 0, 'x', 'i', 'z', 'z', 'z', 'i', 0, 'x', 'y' 
+
+ModeBeg2:
+  .byte 0, 0,    0,  0, 'i', 'y', 0,   'x', 'y', 0,   0, 0,   0 
+
 
 ; Given an address, prints that instruction and then
 ; returns the address of the next instruction.
@@ -220,13 +451,13 @@ Instruction:
   sec
   adc Stack, x ; Calculate ins - ins/4, because we ignore all %11 instructions
   tay
-  lda @instructions_end, y ; get the last letter and addressing mode
+  lda Instructions_end, y ; get the last letter and addressing mode
   pha ; save them
-    lda @instructions, y ; get the first two letters
+    lda Instructions, y ; get the first two letters
     pha ; save them
       and #$F ; mask to get the first letter
       tay
-      lda @firstLetter, y
+      lda FirstLetter, y
       sta IO_PORT
     pla ; get the first two letters again
     lsr
@@ -234,15 +465,13 @@ Instruction:
     lsr
     lsr
     tay
-    lda @secondLetter, y
+    lda SecondLetter, y
     sta IO_PORT
   pla
   pha ; retrieve last letter and addressing mode
     and #$F ; mask to get the last letter
     tay
-    lda @thirdLetter, y
-    sta IO_PORT
-    lda #' '
+    lda ThirdLetter, y
     sta IO_PORT
   pla
   lsr
@@ -250,28 +479,26 @@ Instruction:
   lsr
   lsr
   tay ; a is now the mode number
-  lda @mode_beg, y
+  lda ModeBeg, y
+  beq :+
+    pha
+    lda #'.'
+    sta IO_PORT
+    pla
+    sta IO_PORT
+  :
+  lda ModeBeg2, y
   beq :+
     sta IO_PORT
   :
+  lda #' '
+  sta IO_PORT
   tya
   pha
     inx
     inx ; drop the instruction, leaving the address of the next byte.
     jsr PrintArg
   pla
-  tay
-  lda @mode_end1, y
-  beq :+
-    sta IO_PORT
-  :
-  lda @mode_end2, y
-  beq :+
-    sta IO_PORT
-  :
-  lda @mode_end3, y
-  beq @newlineAndReturn
-    sta IO_PORT
   @newlineAndReturn:
   lda #$0A ; '\n'
   sta IO_PORT
@@ -283,7 +510,7 @@ Instruction:
   iny
 @special_txs:
   ; now y is 0 for txs, 1 for tya, and 2 for txa.
-  lda #'T'
+  lda #'t'
   sta IO_PORT
   lda @special2, y
   sta IO_PORT
@@ -292,33 +519,9 @@ Instruction:
   bne @newlineAndReturn ; bra
 
 @special2:
-  .byte "XYX"
+  .byte "xyx"
 @special3:
-  .byte "SAA"
-
-; Letters used in the instruction names.
-; We can only support up to 16 of each,
-; so that they can be referenced with
-; 4 bits.
-@firstLetter:  .byte  "ABCDEIJLNOPRST"
-@secondLetter: .byte "ABCDEHILMNOPRSTV"
-@thirdLetter:  .byte  "ACDEIKLPQRSTVXY"
-
-; After printing the instruction and a space,
-; print these characters, based on the mode.
-; A zero means to print nothing.
-@mode_beg:
-  .byte 0, '#', 0, '(', '(', 0, 0,   0,   '(', 0, 0,   0 
-
-; After printing the instruction and arg, end the
-; line with these characters, based on the mode.
-; A zero means to print nothing.
-@mode_end1:
-  .byte 0, 0,   0, ',', ')', 0, ',', ',', ')', 0, ',', ','
-@mode_end2:
-  .byte 0, 0,   0, 'x', ',', 0, 'x', 'y', 0,   0, 'x', 'y'
-@mode_end3:
-  .byte 0, 0,   0, ')', 'y', 0, 0,   0,   0,   0, 0,   0
+  .byte "saa"
 
 ; The first two letters of each instruction,
 ; stored as a nibble each.
@@ -327,7 +530,7 @@ Instruction:
 ; letter in all three positions.
 ; Each instruction with byte b is stored at
 ; index b - floor(b/4).
-@instructions:
+Instructions:
 .byte l1::B|l2::R,  l1::O|l2::R,  l1::E|l2::E
 .byte l1::E|l2::E,  l1::O|l2::R,  l1::A_|l2::S
 .byte l1::P|l2::H,  l1::O|l2::R,  l1::A_|l2::S
@@ -396,7 +599,7 @@ Instruction:
 ; The last letter and addressing mode of each instruction.
 ; Each instruction with byte b is stored at index
 ; b - floor(b/4)
-@instructions_end:    
+Instructions_end:    
 .byte l3::K|mode::imm,  l3::A_|mode::indx, l3::E|mode::impl
 .byte l3::E|mode::impl,  l3::A_|mode::zpg,  l3::L|mode::zpg
 .byte l3::P|mode::impl,  l3::A_|mode::imm,  l3::L|mode::impl
@@ -415,7 +618,7 @@ Instruction:
 .byte l3::E|mode::impl,  l3::D|mode::absx,  l3::L|mode::absx
 .byte l3::I|mode::impl,  l3::R|mode::indx,  l3::E|mode::impl
 .byte l3::E|mode::impl,  l3::R|mode::zpg,   l3::R|mode::zpg
-.byte l3::A_|mode::impl, l3::R|mode::imm,   l3::R|mode::impl
+.byte l3::A_|mode::impl, l3::R|mode::imm,   l3::R|mode::acc
 .byte l3::P|mode::abs,   l3::R|mode::abs,   l3::R|mode::abs
 .byte l3::C|mode::rel,   l3::R|mode::indy,  l3::E|mode::impl
 .byte l3::E|mode::impl,  l3::R|mode::zpgx,  l3::R|mode::zpgx
@@ -461,3 +664,5 @@ Instruction:
 .byte l3::E|mode::impl,  l3::C|mode::zpgx,  l3::C|mode::zpgx
 .byte l3::D|mode::impl,  l3::C|mode::absy,  l3::E|mode::impl
 .byte l3::E|mode::impl,  l3::C|mode::absx,  l3::C|mode::absx
+
+

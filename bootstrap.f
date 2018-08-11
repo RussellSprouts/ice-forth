@@ -13,6 +13,7 @@
 : decimal 10 base ! ;
 
 : jsr, 32 c, , ;
+: jmp, 76 c, , ;
 
 \ Recursively call the current word
 : recurse immediate
@@ -33,27 +34,10 @@
 
 hex
   \ todo -- integrate the interpreter to autogenerate these rules
-  : lda.i 0A9 c, c, ;
-  : lda.a 0AD c, , ;
-  : sta.a 08D c, , ;
-  : lda.zx 0B5 c, c, ;
-  : lda.z  0A5 c, c, ;
-  : sta.zx 095 c, c, ;
-  : sta.z 085 c, c, ;
-  : inc.zx 0F6 c, c, ;
-  : inc.z  0E6 c, c, ;
-  : cmp.zx 0D5 c, c, ;
-  : cmp.z  0C5 c, c, ;
-  : beq 0F0 c, c, ;
-  : bne 0D0 c, c, ;
-  : ora.zx 015 c, c, ;
   : pop 0E8E8 , ;
-  : dex;dex 0CACA , ;
-  : inx;inx 0E8E8 , ;
+  : dex;dex dex dex ;
+  : inx;inx inx inx ;
   : clv;bvc 050B8 , c, ;
-  : rts 060 c, ;
-  : pla 068 c, ;
-  : pha 048 c, ;
 
   : debug_start immediate 0FF c, ;
   : debug_end immediate 0FE c, ;
@@ -115,9 +99,9 @@ decimal
 : literal immediate
   dex;dex
   dup
-  <byte lda.i
+  <byte lda.#
   stack sta.zx
-  >byte lda.i
+  >byte lda.#
   stack 1+ sta.zx
 ;
 
@@ -269,9 +253,9 @@ welcome
   word
   create ( create a new dictionary entry )
   dex;dex
-  dup lda.a ( load the value from the variable and push it to the stack )
+  dup lda ( load the value from the variable and push it to the stack )
   stack sta.zx
-  dup 1+ lda.a
+  dup 1+ lda
   stack 1+ sta.zx 
   rts
 
@@ -301,9 +285,9 @@ welcome
   compiling? if
     dup
     stack lda.zx
-    sta.a
+    sta
     stack 1+ lda.zx
-    1+ sta.a
+    1+ sta
     inx;inx
   else
     !
@@ -397,6 +381,8 @@ decimal
   dex;dex
   stack sta.zx
   pha
-  0 lda.i
+  0 lda.#
   stack 1+ sta.zx ]
 ;
+
+.s

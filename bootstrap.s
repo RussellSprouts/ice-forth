@@ -46,7 +46,7 @@ F_INLINE = $40
 .segment "DICT"
 ; Reserve space to push the dictionary to the end of the memory
 ; space, since it now grows down.
-.res $D13
+.res $CF7
 
 .segment "ZEROPAGE": zeropage
 .exportzp TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
@@ -293,6 +293,27 @@ defword "+", 0, ADD
   adc Stack+3, x
   sta Stack+3, x
   pop
+  rts
+
+; Divides a single byte by 3, truncating:
+defword "3/", 0, DIV3
+  ldy #$FF
+  lda #$FD
+:
+  clc
+  adc #3
+  iny
+  cpy #86
+  bge @done
+  cmp Stack, x
+  beq @exact
+  blt :-
+@done:
+  dey
+@exact:
+  sty Stack, x
+  lda #0
+  sta Stack+1, x
   rts
 
 defword "-", 0, SUB
@@ -610,7 +631,12 @@ defword "word", 0, WORD
   lda Stack, x
   pop
   cmp #' ' + 1
-  bcs @loop
+  bge @loop
+
+  ldy TMP1
+  ; iny
+  lda #0
+  sta @word_buffer, y ; zero terminate
 
   push @word_buffer
   dex
@@ -1090,6 +1116,75 @@ BVC_OP = $50
 BEQ_OP = $F0
 JSR_OP = $20
 
+defword "[asm]", 0, RUN_ASM
+  pla
+  sta TMP1
+  pla
+  sta TMP2
+  
+  lda TMP1
+  clc
+  adc #2
+  tay
+
+  lda TMP2
+  adc #0
+  pha ; add 2 to the return address because there are 2 bytes of parameters.
+  tya
+  pha
+
+  ; Move the two parmeters to the stack.
+  ldy #2
+  lda (TMP1), y
+  dex
+  dex
+  sta Stack, x
+  lda #0
+  sta Stack+1, x
+
+  dey
+  lda (TMP1), y
+  dex
+  dex
+  sta Stack, x
+  lda #0
+  sta Stack+1, x
+
+  jmp AsmCompExec
+  
+
+; ( arg? instruction n-bytes -- )
+; Given an optional argument, the number
+; of bytes in the instruction, and the instruction
+; number, compiles the instruction and arg to
+; the code space.
+defword "asm-comp", 0, ASM_COMP
+  lda STATE_VALUE
+  beq AsmCompExec
+@compile:
+  push JSR_OP
+  jsr CCOMMA
+  push RUN_ASM
+  jsr COMMA
+  jsr CCOMMA
+  jsr CCOMMA
+  rts
+AsmCompExec:
+  lda Stack, x
+  pha
+    pop
+    jsr CCOMMA ; write instruction byte
+  pla
+  cmp #2
+  beq @two
+  blt @one
+@three:
+  jmp COMMA
+@two:
+  jmp CCOMMA
+@one:
+  rts
+  
 defword "quit", 0, QUIT
   stx TMP1
     cpx #Stack_End
@@ -1193,6 +1288,38 @@ defword "interpret", 0, INTERPRET
   rts
 
 @nan:
+  pop
+  ; It's not a number
+  lda Stack+2, x
+  sta TMP1
+  lda Stack+3, x
+  sta TMP2
+  jsr ParseInstruction
+  lda Stack, x ; check the length of the instruction parsed.
+  beq :+
+  ; Remove the string
+  lda Stack, x
+  sta Stack+4, x
+  lda Stack+1, x
+  sta Stack+5, x
+  lda Stack+2, x
+  sta Stack+6, x
+  lda Stack+3, x
+  sta Stack+7, x
+  inx
+  inx
+  inx
+  inx
+  jsr SWAP
+  jsr DUP
+  jsr DIV3
+  jsr ADD
+  jsr SWAP
+  jsr ASM_COMP
+  rts
+:
+  ; It's not in the dictionary, it's not a number, and not an instruction.
+  ; Show the error message.
   pop ; drop 0
   lda Stack+2, x
   sta TMP1
@@ -1347,6 +1474,91 @@ defword "see", 0, SEE
   .import Instruction
   jmp Instruction
 
+defword "save-for-interrupt", F_INLINE, SAVE_FOR_INTERRUPT
+  pha
+  tya
+  pha
+  .repeat 8, ii
+    lda TMP1 + ii
+    pha
+  .endrepeat
+  rts ; just to mark the end
+
+defword "restore-for-interrupt", F_INLINE, RESTORE_FOR_INTERRUPT
+  .repeat 8, ii
+    pla
+    sta TMP1 + ii
+  .endrepeat
+  pla
+  tay
+  pla
+  rts ; just to mark the end
+
+defword "ins", 0, INS
+  jsr WORD
+  pop ; drop string length
+  toTMP1
+  pop
+  .import ParseInstruction
+  jsr ParseInstruction
+  beq :+
+  jsr SWAP
+  jsr DUP
+  jsr DIV3
+  jsr ADD
+  jsr SWAP
+: rts
+
+; Does the initial reset of the processor
+defword "asm-reset", 0, ASM_RESET
+  sei
+  cld
+
+  ; This is called as a subroutine before we have set
+  ; the stack pointer! So we need to get the return address,
+  ; set the stack pointer, then put the return address back.
+  pla
+  tay
+  pla
+  ldx #$FF
+  txs
+  pha
+  tya
+  pha
+
+  lda #$40
+  sta $4017 ; disable APU interrupts
+  lda #0
+  sta $2000 ; disable rendering
+  sta $2001 ; "
+  sta $4010 ; disable DMC
+  
+  ; Clear all RAM except the stack
+  ldx #0
+: sta $00, x
+  ; sta $0100, x ; leave stack alone
+  sta $0200, x
+  sta $0300, x
+  sta $0400, x
+  sta $0500, x
+  sta $0600, x
+  sta $0700, x
+  inx
+  bne :-
+
+  rts
+
+defword "wait-for-ppu", 0, WAIT_FOR_PPU
+: lda $2002
+  bpl :-
+: lda $2002
+  bpl :-
+: lda $2002
+  bpl :-
+: lda $2002
+  bpl :-
+  rts
+
 ; Executes the word on the stack.
 defword "execute", 0, EXECUTE
   toTMP1
@@ -1360,9 +1572,10 @@ VINIT_END:
 .assert VINIT_END - VINIT_START < 100, error
 
 .segment "CODE"
+
 reset:
-  sei
-  cld
+  jsr ASM_RESET
+
   ; Initialize the variables.
   ; VINIT is organized as | ADDR | VALUE | ADDR | VALUE | ...
   ldx #0
