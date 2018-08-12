@@ -9,8 +9,8 @@ hex
 : main
   begin frame-started until
   0 to frame-started
-
-  [ ['] main jmp, ]
+ 
+  recurse-tail 
 ;
 
 : set-ppu
@@ -43,5 +43,3 @@ hex
 ;int
 
 ['] frame set-nmi!
-
-.s

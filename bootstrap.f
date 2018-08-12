@@ -21,13 +21,17 @@
   jsr,
 ;
 
+: recurse-tail immediate
+  latest @
+  jmp,
+;
+
 \ Takes the next word and compiles it even if it's immediate
 : [compile] immediate
   word
   find
   jsr,
 ;
-
 
 : 2- 2 - ;
 : 2+ 2 + ;
@@ -38,9 +42,6 @@ hex
   : dex;dex dex dex ;
   : inx;inx inx inx ;
   : clv;bvc 050B8 , c, ;
-
-  : debug_start immediate 0FF c, ;
-  : debug_end immediate 0FE c, ;
 
   : stack 8 ;
 decimal
