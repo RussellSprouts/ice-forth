@@ -9,6 +9,11 @@
 .import IO_PORT, DUP, FETCH, CFETCH, INCR, SWAP, DOT, DODOTQUOTE, RFIND
 .importzp Stack, TMP1, TMP2, TMP3, TMP4
 
+; To save space, the 3 letters and addressing mode of the
+; instruction are stored in 4-bits each for every instruction.
+; Turns out we can almost fit all of the instructions with
+; just 16 possiblitiies for each one. (See below for the
+; exceptions).
 .enum mode
   impl = 0 ; no args
   acc = $10 ; no args, accumulator
@@ -84,7 +89,7 @@
 message: .byte "(.')", $0A, ".byte ", $22, $0
 
 ; Handles disassembly of DODOTQUOTE, which takes
-; it's argument in the following code bytes.
+; its argument inline after the jsr DOTQUOTE
 PrintString:
   inx
   inx
@@ -181,6 +186,16 @@ PrintArg:
 @return:
   rts
 
+; Letters used in the instruction names.
+; We can only support up to 16 of each,
+; so that they can be referenced with
+; 4 bits.
+FirstLetter:  .byte "abcdeijlnoprst"
+SecondLetter: .byte "abcdehilmnoprstv"
+ThirdLetter:  .byte "acdeiklpqrstvxya" ; pad end to 16 characters with a.
+
+; A lookup table for the ascii values of the
+; l1, l2, and l3 enums.
 LetterIndicesLo:
   .byte <FirstLetter, <SecondLetter, <ThirdLetter
 LetterIndicesHi:
@@ -188,7 +203,8 @@ LetterIndicesHi:
 
 ; Given a zero-terminated string address in TMP1-2, parses the string as
 ; an instruction, returning the number of bytes of it takes up and the
-; instruction number.
+; instruction number on the stack. Returns 0 on the stack if the instruction
+; was not found.
 .export ParseInstruction
 ParseInstruction:
   ldy #0
@@ -385,9 +401,9 @@ Illegal:
   sta IO_PORT
   rts
 
-; Given a list of up to 16 letters in TMP3-4,
-; and a letter in A, returns the index of
-; the letter in y. If not found, returns -1
+; Given a pointer to a list of up to 16 letters in TMP3-4,
+; and a letter in A, returns the index of the letter in y.
+; If not found, returns -1
 ParseLetter:
   ldy #0
 @loop:
@@ -399,14 +415,6 @@ ParseLetter:
   ldy #$FF
 @found:
   rts
-
-; Letters used in the instruction names.
-; We can only support up to 16 of each,
-; so that they can be referenced with
-; 4 bits. Pad with a.
-FirstLetter:  .byte "abcdeijlnoprst"
-SecondLetter: .byte "abcdehilmnoprstv"
-ThirdLetter:  .byte "acdeiklpqrstvxya" ; pad end to 16 characters with a
 
 ; After printing the instruction,
 ; print these characters, based on the mode.
@@ -529,7 +537,9 @@ Instruction:
 ; EEE because E was already present as a possible
 ; letter in all three positions.
 ; Each instruction with byte b is stored at
-; index b - floor(b/4).
+; index b - floor(b/4). This is because we
+; skip all instructions that end with the bits
+; 11, which are all illegal.
 Instructions:
 .byte l1::B|l2::R,  l1::O|l2::R,  l1::E|l2::E
 .byte l1::E|l2::E,  l1::O|l2::R,  l1::A_|l2::S
