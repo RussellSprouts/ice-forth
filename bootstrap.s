@@ -289,67 +289,6 @@ defword "-", 0, SUB
   pop
   rts
 
-defword "=", 0, EQU
-  pop
-  lda Stack-2, x
-  cmp Stack, x
-  beq @hi
-  lda #0
-  sta Stack, x
-  sta Stack+1, x
-  rts
-@hi:
-  ldy #0
-  lda Stack-1, x
-  cmp Stack+1, x
-  bne @diff
-  dey
-@diff:
-  sty Stack, x
-  sty Stack+1, x
-  rts
-
-defword "<>", 0, NEQU
-  pop
-  lda Stack-2, x
-  cmp Stack, x
-  beq @hi
-  lda #$FF
-  sta Stack, x
-  sta Stack+1, x
-  rts
-@hi:
-  ldy #$0
-  lda Stack-1, x
-  cmp Stack+1, x
-  beq @same
-  dey
-@same:
-  sty Stack, x
-  sty Stack+1, x
-  rts 
-
-defword "0=", 0, ZEQU
-  ldy #0
-  lda Stack, x
-  ora Stack+1, x
-  bne @nonzero
-  dey
-@nonzero:
-  sty Stack, x
-  sty Stack+1, x
-  rts
-
-defword "0>", 0, ZGT
-  lda Stack+1, x
-  ldy #0
-  bmi @minus
-  dey
-@minus:
-  sty Stack, x
-  sty Stack+1, x
-  rts
-
 DEX_OP = $CA
 LDA_IMM_OP = $A9
 STA_ZP_X_OP = $95
@@ -362,42 +301,6 @@ defword "!", 0, STORE
   lda Stack+3, x
   iny
   sta (TMP1), y
-  pop
-  pop
-  rts
-
-defword "+!", 0, ADDSTORE
-  toTMP1
-  
-  ldy #0
-  clc
-  lda (TMP1), y
-  adc Stack+2, x
-  sta (TMP1), y
-  
-  iny
-  lda (TMP1), y
-  adc Stack+3, x
-  sta (TMP1), y
-  
-  pop
-  pop
-  rts
-
-defword "-!", 0, SUBSTORE
-  toTMP1
-  
-  ldy #0
-  sec
-  lda (TMP1), y
-  sbc Stack+2, x
-  sta (TMP1), y
-  
-  iny
-  lda (TMP1), y
-  sbc Stack+3, x
-  sta (TMP1), y
-  
   pop
   pop
   rts
@@ -1238,23 +1141,6 @@ defword ".s", 0, DOT_S
 @done:
   rts
 
-defword "cr", 0, CR
-  lda #10
-  sta IO_PORT
-  rts
-
-defword ">byte", 0, HI
-  lda Stack+1, x
-  sta Stack, x
-  lda #0
-  sta Stack+1, x
-  rts
-
-defword "<byte", 0, LO
-  lda #0
-  sta Stack+1, x
-  rts
-
 ; Variable which points to the next free variable RAM space.
 defvar "vhere", VHERE_VALUE+2, VHERE
 
@@ -1297,26 +1183,6 @@ defword "c@1+", 0, FETCH_INC
 defword "see", 0, SEE
   .import Instruction
   jmp Instruction
-
-defword "save-for-interrupt", F_INLINE, SAVE_FOR_INTERRUPT
-  pha
-  tya
-  pha
-  .repeat 8, ii
-    lda TMP1 + ii
-    pha
-  .endrepeat
-  rts ; just to mark the end
-
-defword "restore-for-interrupt", F_INLINE, RESTORE_FOR_INTERRUPT
-  .repeat 8, ii
-    pla
-    sta TMP1 + ii
-  .endrepeat
-  pla
-  tay
-  pla
-  rts ; just to mark the end
 
 defword "ins", 0, INS
   jsr WORD

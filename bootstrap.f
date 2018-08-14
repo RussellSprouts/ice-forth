@@ -1,33 +1,62 @@
 
+\ Define addresses of the stack and tmp variables.
 : stack 8 ;
+: tmp 0 ;
+: io-port 16412 ;
+
+\ Macro to move the top of stack into tmp.
+: >TMP
+  stack    LDA.ZX
+  tmp      STA.Z
+  stack 1+ LDA.ZX
+  tmp 1+   STA.Z
+;
 
 \ special case these instructions
 : TXA 138 c, ;
 : TYA 152 c, ;
 : TXS 154 c, ;
 
+\ Define the inline assembly language IF and THEN constructs.
+\ Rather than using labeled branches, we can do structured
+\ control flow. IFEQ, for example, will branch to the matching
+\ THEN if the Z flag is non-zero.
 : IF  chere @ ;
-: IFEQ  0 BEQ IF ;
-: IFNE  0 BNE IF ;
-: IFCC  0 BCC IF ;
-: IFCS  0 BCS IF ;
-: IFVC  0 BVC IF ;
-: IFVS  0 BVS IF ;
-: IFPL  0 BPL IF ;
-: IFMI  0 BMI IF ;
-
+: IFEQ  0 BNE IF ;
+: IFNE  0 BEQ IF ;
+: IFCC  0 BCS IF ;
+: IFCS  0 BCC IF ;
+: IFVC  0 BVS IF ;
+: IFVS  0 BVC IF ;
+: IFPL  0 BMI IF ;
+: IFMI  0 BPL IF ;
 : THEN
   dup
   chere @ swap -
   swap 1- c! 
 ;
 
-: test [
-  stack LDA.ZX
-  32    CMP.#
-  IFEQ
-    stack INC.ZX
-  THEN
+\ Define the assembly language looping constructs.
+\ A BEGIN..UNTIL loop will continue looping until
+\ the condition code given is set.
+: BEGIN  chere @ ;
+: UNTIL  chere @ - 2 - ;
+: UNTILEQ  UNTIL BNE ;
+: UNTILNE  UNTIL BEQ ;
+: UNTILCC  UNTIL BCS ;
+: UNTILCS  UNTIL BCC ;
+: UNTILVC  UNTIL BVS ;
+: UNTILVS  UNTIL BVC ;
+: UNTILPL  UNTIL BMI ;
+: UNTILMI  UNTIL BPL ;
+
+: TEST [
+  255 c,
+  0 LDY.#
+  BEGIN
+    INY
+    5 CPY.#
+  UNTILEQ
 ] ;
 
 \ a b -- a b a
@@ -58,6 +87,67 @@
   stack 5 + STY.ZX
   PLA
   stack 3 + STA.ZX
+] ;
+
+: = [
+  INX INX
+  stack 2 - LDA.ZX
+  stack     CMP.ZX
+  IFNE
+    0        LDA.#
+    stack    STA.ZX
+    stack 1+ STA.ZX
+    RTS
+  THEN
+  0        LDY.#
+  stack 1- LDA.ZX
+  stack 1+ CMP.ZX
+  IFEQ
+    DEY
+  THEN
+  stack    STY.ZX
+  stack 1+ STY.ZX
+] ;
+
+: <> [
+  INX INX
+  stack 2 - LDA.ZX
+  stack     CMP.ZX
+  IFNE
+   255      LDA.#
+   stack    STA.ZX
+   stack 1+ STA.ZX
+   RTS
+ THEN
+ 0 LDY.#
+ stack 1- LDA.ZX
+ stack 1+ CMP.ZX
+ IFNE
+   DEY
+ THEN
+ stack    STY.ZX
+ stack 1+ STY.ZX
+ ] ;
+
+: 0= [
+  0        LDY.#
+  stack    LDA.ZX
+  stack 1+ ORA.ZX
+  IFEQ
+    DEY
+  THEN
+  stack    STY.ZX
+  stack 1+ STY.ZX
+] ;
+
+: 0> [
+  0        LDY.#
+  stack 1+ LDA.ZX
+  IFPL
+    DEY
+  THEN
+  stack    STY.ZX
+  stack 1+ STY.ZX
 ] ;
 
 : and [
@@ -118,12 +208,63 @@
   stack 1+ ROL.ZX
 ] ;
 
+: >byte [
+  stack 1+ LDA.ZX
+  stack    STA.ZX
+  0        LDA.#
+  stack 1+ STA.ZX
+] ;
+
+: <byte always-inline [
+  0 LDA.#
+  stack 1+ STA.ZX
+] ;
+
+: +! [
+  >TMP
+
+  0         LDY.#
+  tmp       LDA.IY
+  CLC
+  stack 2 + ADC.ZX
+  tmp       STA.IY
+
+  INY
+  tmp       LDA.IY
+  stack 3 + ADC.ZX
+  tmp       STA.IY
+
+  INX INX
+  INX INX
+] ;
+
+: -! [
+  >TMP
+
+  0         LDY.#
+  tmp       LDA.IY
+  SEC
+  stack 2 + SBC.ZX
+  tmp       STA.IY
+
+  INY
+  tmp       LDA.IY
+  stack 3 + SBC.ZX
+  tmp       STA.IY
+
+  INX INX
+  INX INX
+] ;
+
 : emit [
   stack LDA.ZX
-  16412 STA \ $401C
+  io-port STA \ $401C
   INX
   INX
 ] ;
+
+: cr
+  10 emit ;
 
 : c>r always-inline [
   stack LDA.ZX
@@ -568,3 +709,50 @@ decimal
   0 LDA.#
   stack 1+ STA.ZX ]
 ;
+
+: save-for-interrupt always-inline [
+  DEX DEX \ make room for the red zone
+  PHA
+  TYA
+  PHA
+  tmp LDA.Z
+  PHA
+  tmp 1+  LDA.Z
+  PHA
+  tmp 2 + LDA.Z
+  PHA
+  tmp 3 + LDA.Z
+  PHA
+  tmp 4 + LDA.Z
+  PHA
+  tmp 5 + LDA.Z
+  PHA
+  tmp 6 + LDA.Z
+  PHA
+  tmp 7 + LDA.Z
+  PHA
+] ;
+
+: restore-for-interrupt always-inline [
+  PLA
+  tmp 7 + STA.Z
+  PLA
+  tmp 6 + STA.Z
+  PLA
+  tmp 5 + STA.Z
+  PLA
+  tmp 4 + STA.Z
+  PLA
+  tmp 3 + STA.Z
+  PLA
+  tmp 2 + STA.Z
+  PLA
+  tmp 1+  STA.Z
+  PLA
+  tmp     STA.Z
+  
+  PLA
+  TAY
+  PLA
+  INX INX \ remove the red zone
+] ;
