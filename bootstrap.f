@@ -1,3 +1,188 @@
+
+: stack 8 ;
+
+\ special case these instructions
+: TXA 138 c, ;
+: TYA 152 c, ;
+: TXS 154 c, ;
+
+: IF  chere @ ;
+: IFEQ  0 BEQ IF ;
+: IFNE  0 BNE IF ;
+: IFCC  0 BCC IF ;
+: IFCS  0 BCS IF ;
+: IFVC  0 BVC IF ;
+: IFVS  0 BVS IF ;
+: IFPL  0 BPL IF ;
+: IFMI  0 BMI IF ;
+
+: THEN
+  dup
+  chere @ swap -
+  swap 1- c! 
+;
+
+: test [
+  stack LDA.ZX
+  32    CMP.#
+  IFEQ
+    stack INC.ZX
+  THEN
+] ;
+
+\ a b -- a b a
+: over [
+  DEX
+  DEX
+  stack 4 + LDA.ZX
+  stack     STA.ZX
+  stack 5 + LDA.ZX
+  stack 1 + STA.ZX  ] ;
+
+\ ( a b c -- b c a )
+: rot [
+  stack     LDA.ZX
+  PHA
+  stack 2 + LDY.ZX
+  stack 4 + LDA.ZX
+  stack     STA.ZX
+  stack 4 + STY.ZX
+  PLA
+  stack 2 + STA.ZX
+  stack 1 + LDA.ZX
+  PHA
+  stack 3 + LDY.ZX
+  stack 5 + LDA.ZX
+
+  stack 1 + STA.ZX
+  stack 5 + STY.ZX
+  PLA
+  stack 3 + STA.ZX
+] ;
+
+: and [
+  stack     LDA.ZX
+  stack 2 + AND.ZX
+  stack 2 + STA.ZX
+  
+  stack 1+  LDA.ZX
+  stack 3 + AND.ZX
+  stack 3 + STA.ZX
+  
+  INX INX
+] ;
+
+: or [
+  stack     LDA.ZX
+  stack 2 + ORA.ZX
+  stack 2 + STA.ZX
+
+  stack 1+  LDA.ZX
+  stack 3 + ORA.ZX
+  stack 3 + STA.ZX
+
+  INX INX
+] ;
+
+: xor [
+  stack     LDA.ZX
+  stack 2 + EOR.ZX
+  stack 2 + STA.ZX
+
+  stack 1+  LDA.ZX
+  stack 3 + EOR.ZX
+  stack 3 + STA.ZX
+
+  INX INX
+] ;
+
+\ Logical shift right
+\ ( u -- u )
+: lsr [
+  stack 1+ LSR.ZX
+  stack    ROR.ZX
+] ;
+
+\ Arithmetic shift right
+\ ( i -- i )
+: asr [
+  stack 1+ LDA.ZX
+  128      CMP.#
+  stack 1+ ROR.ZX
+  stack    ROR.ZX
+] ;
+
+\ Arithmetic shift left
+: asl [
+  stack    ASL.ZX
+  stack 1+ ROL.ZX
+] ;
+
+: emit [
+  stack LDA.ZX
+  16412 STA \ $401C
+  INX
+  INX
+] ;
+
+: c>r always-inline [
+  stack LDA.ZX
+  PHA
+  INX
+  INX
+] ;
+
+: cr> always-inline [
+  DEX
+  DEX
+  PLA
+  stack    STA.ZX
+  0        LDA.#
+  stack 1+ STA.ZX
+] ;
+
+: >r always-inline [
+  stack 1+ LDA.ZX
+  PHA
+  stack    LDA.ZX
+  PHA
+  INX
+  INX
+] ;
+
+: r> always-inline [
+  DEX
+  DEX
+  PLA
+  stack    STA.ZX
+  PLA
+  stack 1+ STA.ZX
+] ;
+
+\ ( r: a -- )
+: rdrop always-inline [
+  PLA
+  PLA
+] ;
+
+\ ( -- sp )
+: dsp@ [
+  DEX
+  DEX
+  TXA
+  stack    STA.ZX
+  0        LDY.#
+  stack 1+ STY.ZX
+] ;
+
+\ ( sp -- )
+: dsp! [
+  stack LDA.ZX
+  TAX
+] ;
+
+: ['] word find ;
+
 : '\n' 10 ;
 : bl 32 ;
 
@@ -38,22 +223,18 @@
 
 hex
   \ todo -- integrate the interpreter to autogenerate these rules
-  : pop 0E8E8 , ;
-  : dex;dex dex dex ;
-  : inx;inx inx inx ;
-  : clv;bvc 050B8 , c, ;
+  : POP INX INX ;
 
-  : stack 8 ;
 decimal
 
 \ Save branch instruction address
 : if immediate
   \ [compile] debug
-  pop
-  stack 2- lda.zx
-  stack 1- ora.zx
+  POP
+  stack 2- LDA.ZX
+  stack 1- ORA.ZX
   chere @
-  0 beq
+  0 BEQ
 ;
 
 : unless immediate
@@ -71,7 +252,7 @@ decimal
 : else immediate
   chere @ 1+
   swap
-  0 clv;bvc
+  CLV 0 BVC
   dup
   chere @ swap - 2-
   swap 1+ c!
@@ -84,26 +265,26 @@ decimal
 
 \ ( branch-target -- )
 : until immediate
-  pop
-  stack 2- lda.zx
-  stack 1- ora.zx
-  chere @ - 2- beq
+  POP
+  stack 2- LDA.ZX
+  stack 1- ORA.ZX
+  chere @ - 2- BEQ
 ;
 
 : while
-  pop
-  stack 2- lda.zx
-  stack 1- ora.zx
-  chere @ - 2- bne
+  POP
+  stack 2- LDA.ZX
+  stack 1- ORA.ZX
+  chere @ - 2- BNE
 ;
 
 : literal immediate
-  dex;dex
+  DEX DEX
   dup
-  <byte lda.#
-  stack sta.zx
-  >byte lda.#
-  stack 1+ sta.zx
+  <byte LDA.#
+  stack STA.ZX
+  >byte LDA.#
+  stack 1+ STA.ZX
 ;
 
 : '(' [ char ( ] literal ;
@@ -138,8 +319,10 @@ decimal
   word
   create
   [compile] literal
-  rts
+  RTS
 ;
+
+1 constant version
 
 ( Declares an uninitialized variable, giving it space
   after vhere )
@@ -253,12 +436,12 @@ welcome
   2 allot ( allot two variables )
   word
   create ( create a new dictionary entry )
-  dex;dex
-  dup lda ( load the value from the variable and push it to the stack )
-  stack sta.zx
-  dup 1+ lda
-  stack 1+ sta.zx 
-  rts
+  DEX DEX
+  dup LDA ( load the value from the variable and push it to the stack )
+  stack STA.ZX
+  dup 1+ LDA
+  stack 1+ STA.ZX 
+  RTS
 
   ( initialize val )
   !
@@ -285,11 +468,11 @@ welcome
   val-addr 
   compiling? if
     dup
-    stack lda.zx
-    sta
-    stack 1+ lda.zx
-    1+ sta
-    inx;inx
+    stack LDA.ZX
+    STA
+    stack 1+ LDA.ZX
+    1+ STA
+    INX INX
   else
     !
   then
@@ -318,7 +501,7 @@ decimal
 
 ( new-xt old-xt -- )
 ( Redefines old as new, so that all calls to old
-  will instead call new. Doesn't replace inlined calls )
+  will instead call new. Doesn't rePLAce inlined calls )
 : monkey-patch
   dict::impl + !
 ;
@@ -354,7 +537,7 @@ decimal
 ;
 
 : do immediate
-  \ inline code to push the loop bound and index onto the return stack
+  \ inline code to push the loop bound and inDEX onto the return stack
   [ ['] c>r >impl literal ]
   dup inline,
       inline,
@@ -365,25 +548,23 @@ decimal
 
 : loop immediate
   \ inline code to pull the loop bounds from the return stack
-  pla
-  0 sta.z
-  0 inc.z
-  pla
-  0 cmp.z
-  6 beq
-  pha
-  0 lda.z
-  pha
-  chere @ - 2- bne
+  PLA
+  0 STA.Z
+  0 INC.Z
+  PLA
+  0 CMP.Z
+  6 BEQ
+  PHA
+  0 LDA.Z
+  PHA
+  chere @ - 2- BNE
 ;
 
 : i always-inline
-  [ pla
-  dex;dex
-  stack sta.zx
-  pha
-  0 lda.#
-  stack 1+ sta.zx ]
+  [ PLA
+  DEX DEX
+  stack STA.ZX
+  PHA
+  0 LDA.#
+  stack 1+ STA.ZX ]
 ;
-
-.s

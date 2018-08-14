@@ -46,7 +46,7 @@ F_INLINE = $40
 .segment "DICT"
 ; Reserve space to push the dictionary to the end of the memory
 ; space, since it now grows down.
-.res $CF7
+.res $D72
 
 .segment "ZEROPAGE": zeropage
 .exportzp TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
@@ -227,44 +227,6 @@ defword "dup", 0, DUP
   sta Stack+1, x
   rts
 
-; ( a b -- a b a )
-defword "over", 0, OVER
-  dex
-  dex
-  lda Stack+4, x
-  sta Stack, x
-  lda Stack+5, x
-  sta Stack+1, x
-
-; ( a b c -- b c a )
-defword "rot", 0, ROT
-  lda Stack, x
-  pha
-  ldy Stack+2, x
-  lda Stack+4, x
-  sta Stack, x
-  sty Stack+4, x
-  pla
-  sta Stack+2, x
-  lda Stack+1, x
-  pha
-  ldy Stack+3, x
-  lda Stack+5, x
-  sta Stack+1, x
-  sty Stack+5, x
-  pla
-  sta Stack+3, x
-  rts
-
-; ( a -- a a | 0 )
-defword "?dup", 0, QDUP
-  lda Stack, x
-  ora Stack+1, x
-  beq @done
-  jmp DUP
-@done:
-  rts
-
 ; ( a -- a + 1 )
 defword "1+", 0, INCR
   inc Stack, x
@@ -388,55 +350,6 @@ defword "0>", 0, ZGT
   sty Stack+1, x
   rts
 
-defword "and", 0, AND_
-  lda Stack, x
-  and Stack+2, x
-  sta Stack+2, x
-  lda Stack+1, x
-  and Stack+3, x
-  sta Stack+3, x
-  pop
-  rts
-
-defword "or", 0, OR
-  lda Stack, x
-  ora Stack+2, x
-  sta Stack+2, x
-  lda Stack+1, x
-  ora Stack+3, x
-  sta Stack+3, x
-  pop
-  rts
-
-defword "xor", 0, XOR
-  lda Stack, x
-  eor Stack+2, x
-  sta Stack+2, x
-  lda Stack+1, x
-  eor Stack+3, x
-  sta Stack+3, x
-  pop
-  rts
-
-defword "asl", 0, ASL_
-  asl Stack, x
-  rol Stack+1, x
-  rts
-
-defword "lsr", 0, LSR_
-  lsr Stack+1, x
-  ror Stack, x
-  rts
-
-defword "invert", 0, INVERT
-  lda Stack, x
-  eor #$FF
-  sta Stack, x
-  lda Stack+1, x
-  eor #$FF
-  sta Stack+1, x
-  rts
-
 DEX_OP = $CA
 LDA_IMM_OP = $A9
 STA_ZP_X_OP = $95
@@ -516,91 +429,6 @@ defword "c@", 0, CFETCH
 
 ; ( ptr1 ptr2 n -- )
 defword "cmove", 0, CMOVE
-
-defconst "version", 1, VERSION
-
-defword "c>r", F_INLINE, C_TOR
-  lda Stack, x
-  pha
-  pop
-  rts
-
-defword "cr>", F_INLINE, C_FROMR
-  dex
-  dex
-  pla
-  sta Stack, x
-  lda #0
-  sta Stack+1, x
-  rts
-
-defword ">r", 0, TOR
-  ; Store return pointer temporarily.
-  pla
-  sta TMP1
-  pla
-  sta TMP2
-
-  lda Stack+1, x
-  pha
-  lda Stack, x
-  pha
-
-  ; Restore return pointer
-  lda TMP2
-  pha
-  lda TMP1
-  pha
-
-  pop
-  rts
-
-defword "r>", 0, FROMR
-  ; Store return pointer temporarily
-  pla
-  sta TMP1
-  pla
-  sta TMP2
-
-  dex
-  dex
-  pla
-  sta Stack, x
-  pla
-  sta Stack+1, x
-
-  ; Restore return pointer
-  lda TMP2
-  pha
-  lda TMP1
-  pha
-  
-  rts
-
-defword "rdrop", 0, RDROP
-  pla
-  pla
-  rts
-
-defword "dsp@", 0, DSPFETCH
-  dex
-  dex
-  txa
-  sta Stack, x
-  ldy #0
-  sty Stack+1, x
-  rts
-
-defword "dsp!", 0, DSPSTORE
-  lda Stack, x
-  tax
-  rts
-
-defword "emit", 0, EMIT
-  lda Stack, x
-  sta IO_PORT
-  pop
-  rts
 
 defword "key", 0, KEY
   dex
@@ -1105,10 +933,6 @@ defword "hide", 0, HIDE
   jsr WORD
   jsr FIND
   jmp HIDDEN
-
-defword "[']", 0, TICK
-  jsr WORD
-  jmp FIND
 
 CLV_OP = $B8
 BVC_OP = $50

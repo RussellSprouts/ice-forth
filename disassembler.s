@@ -190,9 +190,9 @@ PrintArg:
 ; We can only support up to 16 of each,
 ; so that they can be referenced with
 ; 4 bits.
-FirstLetter:  .byte "abcdeijlnoprst"
-SecondLetter: .byte "abcdehilmnoprstv"
-ThirdLetter:  .byte "acdeiklpqrstvxya" ; pad end to 16 characters with a.
+FirstLetter:  .byte "ABCDEIJLNOPRST"
+SecondLetter: .byte "ABCDEHILMNOPRSTV"
+ThirdLetter:  .byte "ACDEIKLPQRSTVXYA" ; pad end to 16 characters with a.
 
 ; A lookup table for the ascii values of the
 ; l1, l2, and l3 enums.
@@ -422,10 +422,10 @@ ParseLetter:
 ; If the first character is non-zero, print a '.' to
 ; separate the mode from the instruction.
 ModeBeg:
-  .byte 0, 'a', '#', 0, 'x', 'i', 'z', 'z', 'z', 'i', 0, 'x', 'y' 
+  .byte 0, 'A', '#', 0, 'X', 'I', 'Z', 'Z', 'Z', 'I', 0, 'X', 'Y' 
 
 ModeBeg2:
-  .byte 0, 0,    0,  0, 'i', 'y', 0,   'x', 'y', 0,   0, 0,   0 
+  .byte 0, 0,    0,  0, 'I', 'Y', 0,   'X', 'Y', 0,   0, 0,   0 
 
 
 ; Given an address, prints that instruction and then

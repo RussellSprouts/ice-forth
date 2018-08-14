@@ -31,7 +31,7 @@ nmi:
   tya
   pha
 
-  lda <PPU_MASK_VAR ;if rendering is disabled, do not access the VRAM at all
+  lda PPU_MASK_VAR ;if rendering is disabled, do not access the VRAM at all
   and #%00011000
   bne @doUpdate
   jmp @skipAll
@@ -41,14 +41,14 @@ nmi:
   lda #>OAM_BUF   ;update OAM
   sta PPU_OAM_DMA
 
-  lda <PAL_UPDATE   ;update palette if needed
+  lda PAL_UPDATE   ;update palette if needed
   bne @updPal
   jmp @updVRAM
 
 @updPal:
 
   ldx #0
-  stx <PAL_UPDATE
+  stx PAL_UPDATE
 
   lda #$3f
   sta PPU_ADDR
@@ -85,12 +85,12 @@ nmi:
 
 @updVRAM:
 
-  lda <VRAM_UPDATE
+  lda VRAM_UPDATE
   beq @skipUpd
   lda #0
-  sta <VRAM_UPDATE
+  sta VRAM_UPDATE
 
-  lda <NAME_UPD_ENABLE
+  lda NAME_UPD_ENABLE
   beq @skipUpd
 
   jsr _flush_vram_update_nmi
@@ -101,22 +101,22 @@ nmi:
   sta PPU_ADDR
   sta PPU_ADDR
 
-  lda <SCROLL_X
+  lda SCROLL_X
   sta PPU_SCROLL
-  lda <SCROLL_Y
+  lda SCROLL_Y
   sta PPU_SCROLL
 
-  lda <PPU_CTRL_VAR
+  lda PPU_CTRL_VAR
   sta PPU_CTRL
 
 @skipAll:
 
-  lda <PPU_MASK_VAR
+  lda PPU_MASK_VAR
   sta PPU_MASK
 
-  inc <FRAME_CNT1
-  inc <FRAME_CNT2
-  lda <FRAME_CNT2
+  inc FRAME_CNT1
+  inc FRAME_CNT2
+  lda FRAME_CNT2
   cmp #6
   bne @skipNtsc
   lda #0
@@ -247,7 +247,7 @@ pal_bright:
 ; Turn off rendering, nmi still enabled when rendering is disabled.
 ; ( -- )
 ppu_off:
-  lda <PPU_MASK_VAR
+  lda PPU_MASK_VAR
   and #%11100111
   sta PPU_MASK_VAR
   jmp ppu_wait_nmi
@@ -255,24 +255,24 @@ ppu_off:
 ; Turn on bg, spr
 ; ( -- )
 ppu_on_all:
-  lda <PPU_MASK_VAR
+  lda PPU_MASK_VAR
   ora #%00011000
 
 ppu_onoff:
-  sta <PPU_MASK_VAR
+  sta PPU_MASK_VAR
   jmp ppu_wait_nmi
 
 ; Turn on bg only
 ; ( -- )
 ppu_on_bg:
-  lda <PPU_MASK_VAR
+  lda PPU_MASK_VAR
   ora #%00001000
   bne ppu_onoff ; bra
 
 ; Turn on spr only
 ; ( -- )
 ppu_on_spr:
-  lda <PPU_MASK_VAR
+  lda PPU_MASK_VAR
   ora #%00010000
   bne ppu_onoff ; bra
 
