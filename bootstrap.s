@@ -5,7 +5,6 @@
 ;   00-FF: zero page
 ;   100-1FF: hardware stack
 ;   200-7FF: User RAM
-;   6000-8000: More RAM - used for the dictionary
 ;   8000-FFFF: Cartridge space
 ;
 ; Unlike a NES cartridge, initially the cartridge space is
@@ -46,7 +45,7 @@ F_INLINE = $40
 .segment "DICT"
 ; Reserve space to push the dictionary to the end of the memory
 ; space, since it now grows down.
-.res $D72
+.res $E5C
 
 .segment "ZEROPAGE": zeropage
 .exportzp TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
@@ -550,10 +549,10 @@ defword "find", 0, FIND
 
   ; Check if current is past the end.
   lda LPointer + 1
-  cmp #>EXECUTE ; execute is last in the dictionary.
+  cmp #>ASM_RESET ; asm-reset is last in the dictionary.
   blt @loop
   lda LPointer
-  cmp #<EXECUTE
+  cmp #<ASM_RESET
   ble @loop
 
 @notFound:
@@ -626,10 +625,10 @@ defword "rfind", 0, RFIND
   sta @LPointer+1
 
   lda @LPointer+1
-  cmp #>EXECUTE
+  cmp #>ASM_RESET
   blt @loop
   lda @LPointer
-  cmp #<EXECUTE
+  cmp #<ASM_RESET
   beq @loop
   blt @loop
 @notFound:
@@ -804,20 +803,6 @@ defword ";", F_IMMED, SEMICOLON
   jsr FETCH
   jsr HIDDEN ; toggle hidden flag
   jmp LSQUARE ; go back to immediate mode
-
-defword "immediate", F_IMMED, IMMEDIATE
-  ldy #(DictEntry::Len)
-  lda #F_IMMED
-  eor (LATEST_VALUE), y
-  sta (LATEST_VALUE), y
-  rts
-
-defword "always-inline", F_IMMED, ALWAYS_INLINE
-  ldy #(DictEntry::Len)
-  lda #F_INLINE
-  eor (LATEST_VALUE), y
-  sta (LATEST_VALUE), y
-  rts
 
 ; ( dict-ptr -- )
 ; Marks the dictionary entry as hidden
@@ -1076,15 +1061,6 @@ defword "interpret", 0, INTERPRET
 @errorMessage:
   .byte $A, "ERROR: Couldn't find word: ", 0
 
-defword "char", 0, CHAR
-  jsr WORD
-  pop
-  lda (Stack, x)
-  sta Stack, x
-  lda #0
-  sta Stack+1, x
-  rts
-
 defword ".", 0, DOT
   ; Set the V flag. While v is set, we will skip
   ; leading 0s. Once we see a digit which is non-zero, clv.
@@ -1132,14 +1108,6 @@ defword ".", 0, DOT
 
 HexDigits: .byte "0123456789ABCDEF"
 
-defword ".s", 0, DOT_S
-  txa
-  cmp #Stack_End - 1
-  beq @done
-  jsr DOT
-  jmp DOT_S
-@done:
-  rts
 
 ; Variable which points to the next free variable RAM space.
 defvar "vhere", VHERE_VALUE+2, VHERE
@@ -1237,22 +1205,6 @@ defword "asm-reset", 0, ASM_RESET
   bne :-
 
   rts
-
-defword "wait-for-ppu", 0, WAIT_FOR_PPU
-: lda $2002
-  bpl :-
-: lda $2002
-  bpl :-
-: lda $2002
-  bpl :-
-: lda $2002
-  bpl :-
-  rts
-
-; Executes the word on the stack.
-defword "execute", 0, EXECUTE
-  toTMP1
-  jmp (TMP1)
 
 .segment "DICT_CODE"
 CHERE_INIT:

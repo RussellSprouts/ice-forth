@@ -30,10 +30,18 @@
 : IFVS  0 BVC IF ;
 : IFPL  0 BMI IF ;
 : IFMI  0 BPL IF ;
+
 : THEN
   dup
   chere @ swap -
   swap 1- c! 
+;
+
+: ELSE
+  CLV
+  IFVS
+  swap
+  THEN
 ;
 
 \ Define the assembly language looping constructs.
@@ -50,14 +58,39 @@
 : UNTILPL  UNTIL BMI ;
 : UNTILMI  UNTIL BPL ;
 
-: TEST [
-  255 c,
-  0 LDY.#
-  BEGIN
-    INY
-    5 CPY.#
-  UNTILEQ
+: WHILE  chere @ ;
+: WHILEEQ  0 BNE WHILE ;
+: WHILENE  0 BEQ WHILE ;
+: WHILECC  0 BCS WHILE ;
+: WHILECS  0 BCC WHILE ;
+: WHILEVC  0 BVS WHILE ;
+: WHILEVS  0 BVC WHILE ;
+: WHILEPL  0 BMI WHILE ;
+: WHILEMI  0 BPL WHILE ;
+
+: REPEAT
+  CLV
+  swap chere @ - 2 - BVC \ bra to start of loop
+  dup
+  chere @ swap -
+  swap 1- c!
+;
+
+: immediate [
+  dict::len LDY.#
+  128       LDA.#
+  latest    EOR.IY
+  latest    STA.IY
 ] ;
+immediate \ mark the word immediate as immediate
+
+: always-inline immediate [
+  dict::len LDY.#
+  64        LDA.#
+  latest    EOR.IY
+  latest    STA.IY
+] ;
+
 
 \ a b -- a b a
 : over [
@@ -87,6 +120,21 @@
   stack 5 + STY.ZX
   PLA
   stack 3 + STA.ZX
+] ;
+
+: .s [
+  BEGIN
+    TXA
+    stack 39 + CMP.#
+  WHILENE
+    ] . [
+  REPEAT
+] ;
+ 
+\ Executes the xt on the stack 
+: execute [
+  >TMP
+  tmp JMP.I
 ] ;
 
 : = [
@@ -419,6 +467,17 @@ decimal
   chere @ - 2- BNE
 ;
 
+: char
+  word
+  [
+    INX INX \ drop word length
+    stack    LDA.XI
+    stack    STA.ZX
+    0        LDA.#
+    stack 1+ STA.ZX
+  ]
+;
+
 : literal immediate
   DEX DEX
   dup
@@ -508,9 +567,9 @@ decimal
   128 and
 ;
 
-( Returns the next dictionary entry. Assumes execute is the last )
+( Returns the next dictionary entry. Assumes asm-reset is the last )
 : next
-  dup [ ['] execute literal ] = if
+  dup [ ['] asm-reset literal ] = if
     drop
     0
   else
@@ -756,3 +815,21 @@ decimal
   PLA
   INX INX \ remove the red zone
 ] ;
+
+hex
+\ Wait a few frames for the PPU to stabilize on power-on
+: wait-for-ppu [
+  BEGIN
+    2002 LDA
+  UNTILMI
+  BEGIN
+    2002 LDA
+  UNTILMI
+  BEGIN
+    2002 LDA
+  UNTILMI
+  BEGIN
+    2002 LDA
+  UNTILMI
+] ;
+

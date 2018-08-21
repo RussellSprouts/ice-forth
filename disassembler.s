@@ -16,7 +16,7 @@
 ; exceptions).
 .enum mode
   impl = 0 ; no args
-  acc = $10 ; no args, accumulator
+  acc = $10 ; accumulator is arg
   
   ; 1 byte arg
   imm = $20
@@ -32,8 +32,9 @@
   abs = $A0
   absx = $B0
   absy = $C0
-
 .endenum
+
+; Enum for first letter in an instruction
 .enum l1
   A_
   B
@@ -50,6 +51,8 @@
   S
   T
 .endenum
+
+; Enum for second letter in an instruction
 .enum l2
   A_ = $0
   B = $10
@@ -68,6 +71,8 @@
   T = $E0
   V = $F0
 .endenum
+
+; Enum for third letter in an instruction
 .enum l3
   A_
   C
@@ -85,6 +90,14 @@
   X_
   Y_
 .endenum
+
+; Letters used in the instruction names.
+; We can only support up to 16 of each,
+; so that they can be referenced with
+; 4 bits.
+FirstLetter:  .byte "ABCDEIJLNOPRST"
+SecondLetter: .byte "ABCDEHILMNOPRSTV"
+ThirdLetter:  .byte "ACDEIKLPQRSTVXYA" ; pad end to 16 characters with a.
 
 message: .byte "(.')", $0A, ".byte ", $22, $0
 
@@ -185,14 +198,6 @@ PrintArg:
   
 @return:
   rts
-
-; Letters used in the instruction names.
-; We can only support up to 16 of each,
-; so that they can be referenced with
-; 4 bits.
-FirstLetter:  .byte "ABCDEIJLNOPRST"
-SecondLetter: .byte "ABCDEHILMNOPRSTV"
-ThirdLetter:  .byte "ACDEIKLPQRSTVXYA" ; pad end to 16 characters with a.
 
 ; A lookup table for the ascii values of the
 ; l1, l2, and l3 enums.
@@ -527,9 +532,9 @@ Instruction:
   bne @newlineAndReturn ; bra
 
 @special2:
-  .byte "xyx"
+  .byte "XYX"
 @special3:
-  .byte "saa"
+  .byte "SAA"
 
 ; The first two letters of each instruction,
 ; stored as a nibble each.
