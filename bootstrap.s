@@ -45,7 +45,7 @@ F_INLINE = $40
 .segment "DICT"
 ; Reserve space to push the dictionary to the end of the memory
 ; space, since it now grows down.
-.res $E5C
+.res $E48
 
 .segment "ZEROPAGE": zeropage
 .exportzp TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
@@ -62,8 +62,9 @@ Stack: .res 40
 .exportzp Stack
 Stack_End: .res 8 ; buffer zone
 
+ControlFlowSP: .res 1
 ControlFlowStack: .res 10
-
+ControlFlowStackEnd:
 ; A segment for initializing variables.
 .segment "VINIT"
 VINIT_START:
@@ -198,6 +199,9 @@ RStack: .res $100
 defconst "dict::impl", DictEntry::CodePtr, DictEntryCodePtr
 defconst "dict::len", DictEntry::Len, DictEntryLen
 defconst "dict::name", DictEntry::Name, DictEntryName
+
+defconst "c-sp", ControlFlowSP, C_SP
+defconst "cstack", ControlFlowStack, CSTACK
 
 ; ( a -- )
 defword "drop", F_INLINE, DROP
@@ -1130,8 +1134,8 @@ defword "(.')", 0, DODOTQUOTE
   iny
   bne @loop  
 @done:
-  clc
-  tya
+  clc ; fix up the return address to the address after the
+  tya ; string
   adc TMP1
   sta TMP1
   lda TMP2
@@ -1239,7 +1243,9 @@ reset:
   cpx #(VINIT_END - VINIT_START)
   bne @vinitLoop
 
-  ldx #Stack_End - 1
+  ldx #Stack_End - Stack - 1
+  lda #ControlFlowStackEnd - ControlFlowStack - 1
+  sta ControlFlowSP
 
   jmp QUIT
 

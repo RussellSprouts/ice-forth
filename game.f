@@ -33,7 +33,7 @@ hex
 
   0 set-ppu
   
-  0 16 do
+  16 0 do
     i 2007 !
   loop
 

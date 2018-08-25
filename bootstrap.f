@@ -125,7 +125,7 @@ immediate \ mark the word immediate as immediate
 : .s [
   BEGIN
     TXA
-    stack 39 + CMP.#
+    39 CMP.#
   WHILENE
     ] . [
   REPEAT
@@ -737,37 +737,44 @@ decimal
 ;
 
 : do immediate
-  \ inline code to push the loop bound and inDEX onto the return stack
-  [ ['] c>r >impl literal ]
-  dup inline,
-      inline,
+  \ inline code to put the loop bound then 
+  c-sp      LDY.Z
+  DEY
+  DEY
+  c-sp      STY.Z
+  stack     LDA.ZX
+  cstack    STA.Y
+  stack  2+ LDA.ZX
+  cstack 1+ STA.Y
+  INX
+  INX
+  INX
+  INX \ drop the values on the stack
 
   \ save the address of the beginning of the loop
   chere @
 ;
 
 : loop immediate
-  \ inline code to pull the loop bounds from the return stack
-  PLA
-  0 STA.Z
-  0 INC.Z
-  PLA
-  0 CMP.Z
-  6 BEQ
-  PHA
-  0 LDA.Z
-  PHA
-  chere @ - 2- BNE
+  c-sp   LDY.Z
+  cstack LDA.Y
+  CLC
+  1      ADC.#
+  cstack 1+ CMP.Y
+  cstack STA.Y
+  UNTILEQ 
 ;
 
-: i always-inline
-  [ PLA
-  DEX DEX
-  stack STA.ZX
-  PHA
+
+: i [
+  DEX
+  DEX
   0 LDA.#
-  stack 1+ STA.ZX ]
-;
+  stack 1+ STA.ZX
+  c-sp LDY.Z
+  cstack LDA.Y
+  stack STA.ZX
+] ;
 
 : save-for-interrupt always-inline [
   DEX DEX \ make room for the red zone
@@ -832,4 +839,3 @@ hex
     2002 LDA
   UNTILMI
 ] ;
-
