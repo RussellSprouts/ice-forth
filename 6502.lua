@@ -299,8 +299,8 @@ local opcodes = {
   [0x8C] = {'STY', function() m.storeAbsolute(m.y) end},
 
   -- tsx/txs
-  [0x9A] = {'TSX', function() m.x = m.sp end},
-  [0xBA] = {'TXS', function() m.sp = m.x end},
+  [0xBA] = {'TSX', function() m.x = m.sp end},
+  [0x9A] = {'TXS', function() m.sp = m.x end},
 
   -- pha/pla
   [0x48] = {'PHA', function() m.push(m.a) end},
@@ -544,9 +544,14 @@ Execution halted. Freezing ROM
 ]]
 
 local romout = io.open('out.nes', 'w')
+local ramout = io.open('ram.out', 'w')
 
 romout:write("NES\x1A\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
 
 for i = 0, 0x7FFF do
   romout:write(string.char(m.memory[i + 0x8000]))
+end
+
+for i = 0, 0x7FF do
+  ramout:write(string.char(m.memory[i]))
 end
