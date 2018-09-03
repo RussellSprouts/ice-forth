@@ -45,7 +45,7 @@ F_INLINE = $40
 .segment "DICT"
 ; Reserve space to push the dictionary to the end of the memory
 ; space, since it now grows down.
-.res $E48
+.res $E1D
 
 .segment "ZEROPAGE": zeropage
 .exportzp TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
@@ -1170,6 +1170,109 @@ defword "ins", 0, INS
   jsr ADD
   jsr SWAP
 : rts
+
+defword "clean-stacks", 0, CLEAN_STACKS
+  ; first set all values not on the data stack
+  ; to 0.
+  stx TMP1
+  lda #0
+@loop:
+  dex
+  bmi @done
+  sta Stack, x
+  bpl @loop
+@done:
+
+  ; Now set all values not on the return stack to 0.
+  tsx
+  stx TMP2
+@loop2:
+  dex
+  beq @done2
+  sta RStack, x
+  bne @loop2
+@done2:
+  
+  sta RStack
+  ; restore stack pointers
+  ldx TMP2
+  txs
+  ldx TMP1
+  rts
+
+; ( src target -- src target )
+defword "compress", 0, COMPRESS
+  Last := TMP1
+  jsr @readByte ; read the first byte
+  sta Last
+  jsr @writeByte ; write the byte
+@comLoop:
+  jsr @readByte ; read a byte
+  jsr @writeByte ; write it
+  cmp Last ; is it the same as the last?
+  beq :+
+  sta Last ; save the last value
+  bne @comLoop ; bra
+: jsr @countRepeats ; if it's the same, find the end of it.
+  jsr @writeByte
+  jmp COMPRESS ; loop again
+; ( src target -- src target a:byte )
+@readByte:
+  lda Stack + 3
+  cmp #>$800
+  beq @endOfRam
+  lda (Stack + 2, x)
+  inc Stack + 2
+  bne :+
+  inc Stack + 3
+: rts
+@endOfRam:
+  pla
+  pla ; remove return from readByte
+  rts ; remove to caller of compress
+
+; ( target a:byte -- target a:byte )
+@writeByte:
+  sta (Stack, x)
+  inc Stack
+  bne :+
+  inc Stack + 1
+: rts
+; ( src target a:byte -- src target a:count )
+; Counts the number of repetitions of the
+; byte given in the source, from 0 to $FE
+@countRepeats:
+  sta TMP2
+  ldy #$FF
+@loop:
+  iny
+  cpy #$FE
+  beq @done
+  lda Stack + 3, x ; high byte of source
+  cmp #>$800 ; check if we've reached the end
+  beq @done
+  jsr @readByte
+  cmp TMP2
+  beq @loop
+  lda Stack + 2
+  bne :+
+  dec Stack + 3
+: dec Stack + 2 ; undo reading the byte that doesn't match
+@done:
+  tya
+  rts
+
+defword "save-ram", 0, SAVE_RAM
+  push ControlFlowStackEnd
+  dex
+  dex
+  lda CHERE_VALUE
+  sta Stack, x
+  lda CHERE_VALUE + 1
+  sta Stack + 1, x
+  jsr COMPRESS
+  push $FF
+  jsr CCOMMA
 
 ; Does the initial reset of the processor
 defword "asm-reset", 0, ASM_RESET

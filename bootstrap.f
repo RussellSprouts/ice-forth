@@ -386,25 +386,22 @@ immediate \ mark the word immediate as immediate
 : hex 16 base ! ;
 : decimal 10 base ! ;
 
-: jsr, 32 c, , ;
-: jmp, 76 c, , ;
-
 \ Recursively call the current word
 : recurse immediate
   latest @
-  jsr,
+  JSR
 ;
 
 : recurse-tail immediate
   latest @
-  jmp,
+  JMP
 ;
 
 \ Takes the next word and compiles it even if it's immediate
 : [compile] immediate
   word
   find
-  jsr,
+  JSR
 ;
 
 : 2- 2 - ;
@@ -427,7 +424,7 @@ decimal
 ;
 
 : unless immediate
-  ['] not jsr,
+  ['] not JSR
   [compile] if
 ;
 
@@ -450,6 +447,12 @@ decimal
 : begin immediate
   \ [compile] debug
   chere @
+;
+
+\ ( branch-target -- )
+: repeat immediate
+  CLV
+  chere @ - 2- BVC
 ;
 
 \ ( branch-target -- )
@@ -596,7 +599,7 @@ decimal
 ( -- )
 : ." immediate
   compiling? if
-    [ ['] (.') ] literal jsr, ( compile jsr (.") )
+    [ ['] (.') ] literal JSR ( compile jsr (.") )
 
     begin
       key
@@ -623,13 +626,6 @@ decimal
 
 welcome
 
-( A jump to 0 is treated as a signal to
-  the emulator to stop execution and freeze
-  the ROM )
-: freeze
-  [ 0 jsr, ] 
-;
-
 ( A variable which, when called, pushes its value instead of its address )
 : val
   vhere @ ( get the variable address )
@@ -647,6 +643,21 @@ welcome
   !
 
   [ ['] always-inline literal ] execute drop
+;
+
+: c-val
+  vhere @ ( get the variable address )
+  1 allot
+  word
+  create ( create a new dictionary entry )
+  DEX DEX
+  dup LDA ( load the value and push it )
+  stack STA.ZX
+  0 LDA.#
+  stack 1+ STA.ZX
+  RTS
+  ( initialize )
+  !
 ;
 
 ( Gets the address of a val )
@@ -675,6 +686,17 @@ welcome
     INX INX
   else
     !
+  then
+;
+
+: c-to immediate
+  val-addr 
+  compiling? if
+    stack LDA.ZX
+    STA
+    INX INX
+  else
+    c!
   then
 ;
 
@@ -839,3 +861,31 @@ hex
     2002 LDA
   UNTILMI
 ] ;
+
+0 c-val last
+variable ram-addr
+( Copies and compresses the RAM )
+: copy-ram
+  clean-stacks
+  0 ram-addr !
+  begin
+    ram-addr @ c@
+    dup last =
+    if
+      ." r "   
+    then
+    to last
+    .
+    ram-addr @ 1+ ram-addr !
+    ram-addr @ 800 =
+  until
+;
+
+( A jump to 0 is treated as a signal to
+  the emulator to stop execution and freeze
+  the ROM )
+: freeze
+  save-ram
+  [ 0 JSR ]
+;
+
