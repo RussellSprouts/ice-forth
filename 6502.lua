@@ -527,10 +527,10 @@ function emulate()
   end
 end
 
-local fig = io.open('fig', 'r')
-local rom = fig:read('*a')
+local bootstrap = io.open('bootstrap.bin', 'r')
+local rom = bootstrap:read('*a')
 for i = 0, 0xFFFF do
-  --print(i, rom:byte(i+1, i+2), rom:len())
+  -- print(i, rom:byte(i+1, i+2), rom:len())
   m.memory[i] = rom:byte(i+1, i+2)
 end
 
