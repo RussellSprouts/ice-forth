@@ -110,14 +110,14 @@ m = {
     return m.read(addr) + m.read(addrPlus1) * 256
   end,
   readIndirectX = function()
-    m.ip = m.ip + 1
-    local addr = m.read(m.ip) + m.x
-    local addrPlus1 = bit.band(addr + 1, 0xFF)
-    return m.read(m.read(addr) + m.read(addrPlus1) * 256)
+    local zpAddr = m.readImmediate()
+    zpAddr = bit.band(zpAddr + m.x, 0xFF)
+    local addrPlus1 = bit.band(zpAddr + 1, 0xFF)
+    return m.read(m.read(zpAddr) + m.read(addrPlus1) * 256)
   end,
   storeIndirectX = function(val)
     m.ip = m.ip + 1
-    local addr = m.read(m.ip) + m.x
+    local addr = bit.band(m.read(m.ip) + m.x, 0xFF)
     local addrPlus1 = bit.band(addr + 1, 0xFF)
     return m.set(m.read(addr) + m.read(addrPlus1) * 256, val)
   end,
