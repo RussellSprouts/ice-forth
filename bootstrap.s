@@ -45,7 +45,7 @@ F_INLINE = $40
 .segment "DICT"
 ; Reserve space to push the dictionary to the end of the memory
 ; space, since it now grows down.
-.res $E1D
+.res $E14
 
 .segment "ZEROPAGE": zeropage
 .exportzp TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
@@ -65,9 +65,6 @@ Stack_End: .res 8 ; buffer zone
 ControlFlowSP: .res 1
 ControlFlowStack: .res 10
 ControlFlowStackEnd:
-; A segment for initializing variables.
-.segment "VINIT"
-VINIT_START:
 
 .segment "RAM"
 ; Reserve the hardware stack.
@@ -158,20 +155,13 @@ RStack: .res $100
 ; Variables are a special kind of word which reserve
 ; two bytes of space in the VARIABLES segment, and when
 ; executed, push that address on the stack.
-; We want them to keep their values even after freezing,
-; so we also put an entry in VINIT, which consists of the
-; address of the variable and the initial value. On reset,
-; the code reads those entries and initializes all of them.
 .macro defvar name, init, label
   defword name, 0, label
     push .ident(.concat(.string(label), "_VALUE"))
     rts
   .segment "VARIABLES"
   .ident(.concat(.string(label), "_VALUE")):
-  .res 2
-  .segment "VINIT"
-    .word .ident(.concat(.string(label), "_VALUE"))
-    .word init
+  .word init
 .endmacro
 
 ; The same as a variable, except it is allocated in the zero
@@ -182,10 +172,7 @@ RStack: .res $100
     rts
   .segment "ZEROPAGE": zeropage
   .ident(.concat(.string(label), "_VALUE")):
-  .res 2
-  .segment "VINIT"
-    .word .ident(.concat(.string(label), "_VALUE"))
-    .word init
+  .word init
 .endmacro
 
 ; A constant is a word which pushes its value onto the stack
@@ -359,7 +346,7 @@ defword "word", 0, WORD
 
 @loop:
   ldy TMP1
-  sta @word_buffer, y
+  sta word_buffer, y
   inc TMP1
   jsr KEY
   lda Stack, x
@@ -370,9 +357,9 @@ defword "word", 0, WORD
   ldy TMP1
   ; iny
   lda #0
-  sta @word_buffer, y ; zero terminate
+  sta word_buffer, y ; zero terminate
 
-  push @word_buffer
+  push word_buffer
   dex
   dex
   lda TMP1
@@ -390,7 +377,7 @@ defword "word", 0, WORD
   beq WORD_IMPL ; bra
 
 .segment "VARIABLES"
-  @word_buffer: .res 32
+  word_buffer: .res 32
 
 defvar "base", 10, BASE
 
@@ -553,10 +540,10 @@ defword "find", 0, FIND
 
   ; Check if current is past the end.
   lda LPointer + 1
-  cmp #>ASM_RESET ; asm-reset is last in the dictionary.
+  cmp #>SAVE_RAM ; SAVE_RAM is last in the dictionary.
   blt @loop
   lda LPointer
-  cmp #<ASM_RESET
+  cmp #<SAVE_RAM
   ble @loop
 
 @notFound:
@@ -629,10 +616,10 @@ defword "rfind", 0, RFIND
   sta @LPointer+1
 
   lda @LPointer+1
-  cmp #>ASM_RESET
+  cmp #>SAVE_RAM ; assumes SAVE_RAM is the last entry in the dictionary
   blt @loop
   lda @LPointer
-  cmp #<ASM_RESET
+  cmp #<SAVE_RAM
   beq @loop
   blt @loop
 @notFound:
@@ -1192,56 +1179,79 @@ defword "clean-stacks", 0, CLEAN_STACKS
   sta RStack, x
   bne @loop2
 @done2:
-  
+ 
+  ; Clear word_buffer
+  lda #0
+  ldx #32
+: dex
+  sta word_buffer, x
+  bne :-
+
   sta RStack
   ; restore stack pointers
   ldx TMP2
   txs
   ldx TMP1
+
   rts
 
 ; ( src target -- src target )
 defword "compress", 0, COMPRESS
+  jsr CLEAN_STACKS
   Last := TMP1
-  jsr @readByte ; read the first byte
+  jsr readByte ; read the first byte
   sta Last
-  jsr @writeByte ; write the byte
+  jsr writeByte ; write the byte
 @comLoop:
-  jsr @readByte ; read a byte
-  jsr @writeByte ; write it
+  jsr readByte ; read a byte
+  jsr writeByte ; write it
   cmp Last ; is it the same as the last?
   beq :+
   sta Last ; save the last value
   bne @comLoop ; bra
-: jsr @countRepeats ; if it's the same, find the end of it.
-  jsr @writeByte
+: jsr countRepeats ; if it's the same, find the end of it.
+  jsr writeByte
   jmp COMPRESS ; loop again
 ; ( src target -- src target a:byte )
-@readByte:
-  lda Stack + 3
+readByte:
+  lda Stack + 3, x
   cmp #>$800
-  beq @endOfRam
+  beq endOfRam
   lda (Stack + 2, x)
-  inc Stack + 2
+  inc Stack + 2, x
   bne :+
-  inc Stack + 3
+  inc Stack + 3, x
 : rts
-@endOfRam:
+endOfRam:
   pla
   pla ; remove return from readByte
   rts ; remove to caller of compress
 
 ; ( target a:byte -- target a:byte )
-@writeByte:
+writeByte:
   sta (Stack, x)
-  inc Stack
-  bne :+
-  inc Stack + 1
-: rts
+  inc Stack, x
+  bne @return
+  inc Stack + 1, x
+  pha
+    lda Stack + 1, x
+    cmp #>$800 ; when decompressing, stop when we reach $800
+    beq endDecom
+  pla
+@return:
+  .byte $DF, "rr", 0
+  rts
+endDecom:
+  .byte $DF, "edc", 0
+  pla
+  pla
+  pla
+  rts
+
 ; ( src target a:byte -- src target a:count )
 ; Counts the number of repetitions of the
 ; byte given in the source, from 0 to $FE
-@countRepeats:
+countRepeats:
   sta TMP2
   ldy #$FF
 @loop:
@@ -1251,7 +1261,7 @@ defword "compress", 0, COMPRESS
   lda Stack + 3, x ; high byte of source
   cmp #>$800 ; check if we've reached the end
   beq @done
-  jsr @readByte
+  jsr readByte
   cmp TMP2
   beq @loop
   lda Stack + 2
@@ -1262,6 +1272,46 @@ defword "compress", 0, COMPRESS
   tya
   rts
 
+; ( src target -- src target )
+defword "decom", 0, DECOMPRESS
+@again:
+  .byte $DF, "ag", 0
+  jsr readByte ; read the first byte
+  sta Last
+  jsr writeByte ; write the byte
+@decomLoop:
+  .byte $DF, "l", 0
+  jsr readByte
+  jsr writeByte
+  cmp Last
+  beq :+
+  sta Last
+  .byte $DF, "start", 0
+  bne @decomLoop ; bra
+: .byte $DF, "same", 0
+  pha ; save value
+    jsr readByte ; read repeat count
+    tay ; move it to y
+  pla
+  cpy #0
+  beq @again
+@writeLoop:
+  .byte $DF, "loopy", 0
+  jsr writeByte 
+  dey
+  bne @writeLoop
+  beq @again
+  
+defword "rest-ram", 0, RESTORE_RAM
+  dex
+  dex
+  lda CHERE_VALUE
+  sta Stack, x
+  lda CHERE_VALUE + 1
+  sta Stack + 1, x
+  push ControlFlowStackEnd
+  jmp DECOMPRESS
+
 defword "save-ram", 0, SAVE_RAM
   push ControlFlowStackEnd
   dex
@@ -1270,81 +1320,18 @@ defword "save-ram", 0, SAVE_RAM
   sta Stack, x
   lda CHERE_VALUE + 1
   sta Stack + 1, x
-  jsr COMPRESS
-  push $FF
-  jsr CCOMMA
-
-; Does the initial reset of the processor
-defword "asm-reset", 0, ASM_RESET
-  sei
-  cld
-
-  ; This is called as a subroutine before we have set
-  ; the stack pointer! So we need to get the return address,
-  ; set the stack pointer, then put the return address back.
-  pla
-  tay
-  pla
-  ldx #$FF
-  txs
-  pha
-  tya
-  pha
-
-  lda #$40
-  sta $4017 ; disable APU interrupts
-  lda #0
-  sta $2000 ; disable rendering
-  sta $2001 ; "
-  sta $4010 ; disable DMC
-  
-  ; Clear all RAM except the stack
-  ldx #0
-: sta $00, x
-  ; sta $0100, x ; leave stack alone
-  sta $0200, x
-  sta $0300, x
-  sta $0400, x
-  sta $0500, x
-  sta $0600, x
-  sta $0700, x
-  inx
-  bne :-
-
-  rts
+  jmp COMPRESS
 
 .segment "DICT_CODE"
 CHERE_INIT:
 
-.segment "VINIT"
-VINIT_END:
-.assert VINIT_END - VINIT_START < 100, error
-
 .segment "CODE"
 
 reset:
-  jsr ASM_RESET
-
-  ; Initialize the variables.
-  ; VINIT is organized as | ADDR | VALUE | ADDR | VALUE | ...
-  ldx #0
-@vinitLoop:
-  lda VINIT_START, x
-  sta TMP1
-  lda VINIT_START+1, x
-  sta TMP1+1
-  lda VINIT_START+2, x
-  ldy #0
-  sta (TMP1), y
-  iny
-  lda VINIT_START+3, x
-  sta (TMP1), y
-  inx
-  inx
-  inx
-  inx
-  cpx #(VINIT_END - VINIT_START)
-  bne @vinitLoop
+  sei
+  cld
+  ldx #$FF
+  txs
 
   ldx #Stack_End - Stack - 1
   lda #ControlFlowStackEnd - ControlFlowStack - 1

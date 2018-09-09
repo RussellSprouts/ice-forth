@@ -570,9 +570,9 @@ decimal
   128 and
 ;
 
-( Returns the next dictionary entry. Assumes asm-reset is the last )
+( Returns the next dictionary entry. Assumes save-ram is the last )
 : next
-  dup [ ['] asm-reset literal ] = if
+  dup [ ['] save-ram literal ] = if
     drop
     0
   else
@@ -885,7 +885,7 @@ variable ram-addr
   the emulator to stop execution and freeze
   the ROM )
 : freeze
-  save-ram
+  \ save-ram
   [ 0 JSR ]
 ;
 

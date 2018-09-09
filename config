@@ -14,7 +14,6 @@ SEGMENTS {
   VARIABLES: load = RAM, type = ro, optional = true;
   RAM2: load = RAM2, type = ro, optional = true;
   CODE: load = CODE, type = ro;
-  VINIT: load = CODE, type = ro, define=yes;
   DICT_CODE: load = CODE, type = ro;
   DICT: load = DICT, type = ro, optional = true;
   VECTORS: load = VECTORS, type = ro;

@@ -104,7 +104,6 @@ variable pal-buf 17 allot
 
 : reset
   \ TODO DO STUFF HERE
-  asm-reset
   main
 ;
 
@@ -127,3 +126,10 @@ variable pal-buf 17 allot
 ;int
 
 ['] frame set-nmi!
+
+: ram-test save-ram rest-ram ;
+: t ." compressed:" ;
+
+ram-test
+freeze
+

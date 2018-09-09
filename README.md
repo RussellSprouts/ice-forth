@@ -1,15 +1,40 @@
 # Ice Forth
 
-A Forth implementation self-hosted on the NES. Compiling a cartridge
-has several stages -- first, the assembly code is compiled into an initial
-cartridge. The initial cartridge has the basics of a Forth interpreter 
-and some other goodies. `6502.lua` emulates a NES cartridge with RAM
-instead of ROM, and the Forth sources are streamed in to the interpreter.
-The sources can write in the cartridge memory and add new code. When
-it's finished, the command `freeze` tells the emulator that the
-cart is ready. The RAM of the cartridge is frozen into a ROM file and
-saved in `out.nes`.
+A Forth implementation self-hosted on the 6502, for creating NES cartridges.
 
+Compiling a cartridge has several stages.
+
+1. The assembly code (.s files) are compiled into an initial cartridge
+   `bootstrap.bin`. This is a 64kb file containing the full memory space at
+   startup for the next step. In that space we have the the basics of a Forth
+   interpreter with an integrated assembler. (This only takes up a few kb of the
+   full 64).
+
+2. `6502.lua` loads `bootstrap.bin` into its memory, and emulates running the
+   interpreter on the NES processor, using a virtual cartridge with RAM everywhere.
+   The emulator has the crucial addition of an IO port, which is used to input
+   Forth code and get Forth output.
+
+3. A minimal subset of the Forth environment is defined in assembly, so next we
+   stream in the contents of `bootstrap.f` to the running cartridge. This defines 
+   the rest of the base Forth environment.
+
+4. Other Forth code is defined in other files which are streamed in, and afterward
+   the REPL opens for the user to test words. This Forth code is compiled into what
+   will become cartridge space on the NES, and defines the NES program. The emulation
+   finishes at the execution of the word `freeze`.
+
+5. `freeze` will turn the running interpreter into a ROM. The contents of NES RAM in the
+   intepreter are compressed and moved into the cartridge space so they can be restored
+   after freeze finishes, but the Forth data, return, and control flow stacks are
+   emptied. The Forth internal temp locations are also emptied. Once the compressed data
+   is written, the memory space from $8000-$FFFF is now permanently frozen. This section
+   of memory becomes the PRG data of the `out.nes` file.
+
+6. The NES ROM is now created. The reset vector will set up the stack pointers
+   and restore the contents of RAM, continuing from where `freeze` left off. It will
+   jump to the execution token stored in `thaw`.
+   
 ## Features
 
 - Not really compliant with ANS Forth :/
