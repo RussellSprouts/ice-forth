@@ -306,6 +306,28 @@ local opcodes = {
   [0x48] = {'PHA', function() m.push(m.a) end},
   [0x68] = {'PLA', function() m.a = m.pop() end},
 
+  -- php/plp
+  [0x08] = {'PHP', function()
+    m.push(
+      (m.status.n ~= 0 and 0x80 or 0)
+      + (m.status.v ~= 0 and 0x40 or 0)
+      + 0x20
+      + 0x10
+      + (m.status.d ~= 0 and 0x08 or 0)
+      + (m.status.i ~= 0 and 0x04 or 0)
+      + (m.status.z ~= 0 and 0x02 or 0)
+      + (m.status.c ~= 0 and 0x01 or 0))
+  end},
+  [0x28] = {'PLP', function()
+    local val = m.pop()
+    m.status.n = bit.band(m.status, 0x80) and 1 or 0
+    m.status.v = bit.band(m.status, 0x40) and 1 or 0
+    m.status.d = bit.band(m.status, 0x08) and 1 or 0
+    m.status.i = bit.band(m.status, 0x04) and 1 or 0
+    m.status.z = bit.band(m.status, 0x02) and 1 or 0
+    m.status.c = bit.band(m.status, 0x01) and 1 or 0
+  end},
+
   -- tax/txa
   [0xAA] = {'TAX', function() m.x = m.setSZ(m.a) end},
   [0x8A] = {'TXA', function() m.a = m.setSZ(m.x) end},
