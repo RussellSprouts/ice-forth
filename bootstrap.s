@@ -1258,9 +1258,8 @@ SPSave:
   ; pushes the return address directly. So,
   ; we need to increment our return address by 1.
   inc $101, x
-  bne :+
+  bne PSave
   inc $102, x
-:
 
 PSave:
   lda #0

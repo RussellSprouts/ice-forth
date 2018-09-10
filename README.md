@@ -31,9 +31,8 @@ Compiling a cartridge has several stages.
    is written, the memory space from $8000-$FFFF is now permanently frozen. This section
    of memory becomes the PRG data of the `out.nes` file.
 
-6. The NES ROM is now created. The reset vector will set up the stack pointers
-   and restore the contents of RAM, continuing from where `freeze` left off. It will
-   jump to the execution token stored in `thaw`.
+6. The NES ROM is now created. The word `thaw` is the startup word. It will restore
+   the state of the machine and return as if returning from the word freeze.
    
 ## Features
 

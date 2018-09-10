@@ -254,6 +254,15 @@ local function CMP(a, b)
   m.status.n = comparison > 0x7F and 1 or 0
 end
 
+local function SET_P(a)
+  m.status.n = bit.band(a, 0x80) and 1 or 0
+  m.status.v = bit.band(a, 0x40) and 1 or 0
+  m.status.d = bit.band(a, 0x08) and 1 or 0
+  m.status.i = bit.band(a, 0x04) and 1 or 0
+  m.status.z = bit.band(a, 0x02) and 1 or 0
+  m.status.c = bit.band(a, 0x01) and 1 or 0
+end
+
 local opcodes = {
   -- bit
   [0x24] = {'BIT ZP', function() BIT(m.readZeroPage()) end},
@@ -320,12 +329,7 @@ local opcodes = {
   end},
   [0x28] = {'PLP', function()
     local val = m.pop()
-    m.status.n = bit.band(m.status, 0x80) and 1 or 0
-    m.status.v = bit.band(m.status, 0x40) and 1 or 0
-    m.status.d = bit.band(m.status, 0x08) and 1 or 0
-    m.status.i = bit.band(m.status, 0x04) and 1 or 0
-    m.status.z = bit.band(m.status, 0x02) and 1 or 0
-    m.status.c = bit.band(m.status, 0x01) and 1 or 0
+    SET_P(val)
   end},
 
   -- tax/txa
@@ -451,6 +455,11 @@ local opcodes = {
   [0x60] = {'RTS', function()
     m.ip = m.pop() + 256*m.pop()
     --print(string.format("NEW IP %04x", m.ip))
+  end},
+
+  [0x40] = {'RTI', function()
+    SET_P(m.pop())
+    m.ip = m.pop() + 256*m.pop() - 1
   end},
 
   -- branch

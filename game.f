@@ -128,4 +128,3 @@ variable pal-buf 17 allot
 ['] frame set-nmi!
 
 freeze
-
