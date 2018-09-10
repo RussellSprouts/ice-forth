@@ -127,9 +127,5 @@ variable pal-buf 17 allot
 
 ['] frame set-nmi!
 
-: ram-test save-ram rest-ram ;
-: t ." compressed:" ;
-
-ram-test
 freeze
 

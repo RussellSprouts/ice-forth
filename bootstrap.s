@@ -45,7 +45,7 @@ F_INLINE = $40
 .segment "DICT"
 ; Reserve space to push the dictionary to the end of the memory
 ; space, since it now grows down.
-.res $E14
+.res $E00
 
 .segment "ZEROPAGE": zeropage
 .exportzp TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
@@ -1158,169 +1158,226 @@ defword "ins", 0, INS
   jsr SWAP
 : rts
 
-defword "clean-stacks", 0, CLEAN_STACKS
-  ; first set all values not on the data stack
-  ; to 0.
-  stx TMP1
-  lda #0
+defword "thaw", 0, THAW
+  Source := TMP1
+  Target := TMP3
+
+  ; Set source pointer
+  ; (Self-modifying code set by freeze)
+SourcePtrLo:
+  lda #<0000
+  sta Source
+SourcePtrHi:
+  lda #>0000
+  sta Source+1
+
+  ; Set target pointer (just after TMP1-8)
+  lda #<Stack
+  sta Target
+  lda #>Stack
+  sta Target+1
+
+SrcAgain:
+  ldy #0
+  lda (Source), y ; read byte
+  iny
+  cmp (Source), y ; peek a comparison with next byte
+  beq @run
+@single:
+  ; it's a single byte, not a run
+  ldy #0
+  sta (Target), y
+  ldx #1 ; signal to increment source by 1
+  bne @then ; bra
+@run:
+  ; It's a run of the same byte
+  sta TMP6
+    iny
+    lda (Source), y ; read run length
+    sta TMP5
+    tay
+  lda TMP6
+  iny
+  iny ; add 2 to run length
 @loop:
-  dex
-  bmi @done
-  sta Stack, x
-  bpl @loop
-@done:
+  dey
+  sta (Target), y
+  bne @loop
 
-  ; Now set all values not on the return stack to 0.
-  tsx
-  stx TMP2
-@loop2:
-  dex
-  beq @done2
-  sta RStack, x
-  bne @loop2
-@done2:
- 
-  ; Clear word_buffer
-  lda #0
-  ldx #32
-: dex
-  sta word_buffer, x
-  bne :-
+  ldy TMP5
+  iny
+  ldx #3 ; signal to increment source by 3
+@then:
+  ; Now we need to increment source and target
+  ; y+1 tells us how much to increment target
+  ; x tells us how much to increment source
+  sty TMP5
+  lda Target
+  sec ; adjust +1
+  adc TMP5
+  sta Target
 
-  sta RStack
-  ; restore stack pointers
-  ldx TMP2
+  lda Target+1
+  adc #0
+  sta Target+1 ; adjusted target
+
+  stx TMP5
+  lda Source
+  clc
+  adc TMP5
+  sta Source
+
+  lda Source+1
+  adc #0
+  sta Source+1 ; adjusted source
+
+  lda EndPtrLo+1
+  lda Source
+EndPtrLo:
+  cmp #<0000
+  bne SrcAgain
+
+  lda Source+1
+EndPtrHi:
+  cmp #>0000
+  bne SrcAgain
+
+  ; Source has now reached the end, so we've restored all of RAM.
+@restoreRegs:
+  ; Restore the register states (self-modifying code -- modified in freeze)
+SPSave:
+  ldx #0
   txs
-  ldx TMP1
-
+ASave:
+  lda #0
+XSave:
+  ldx #0
+YSave:
+  ldy #0
   rts
 
-; ( src target -- src target )
-defword "compress", 0, COMPRESS
-  jsr CLEAN_STACKS
-  Last := TMP1
-  jsr readByte ; read the first byte
-  sta Last
-  jsr writeByte ; write the byte
-@comLoop:
-  jsr readByte ; read a byte
-  jsr writeByte ; write it
-  cmp Last ; is it the same as the last?
-  beq :+
-  sta Last ; save the last value
-  bne @comLoop ; bra
-: jsr countRepeats ; if it's the same, find the end of it.
-  jsr writeByte
-  jmp COMPRESS ; loop again
-; ( src target -- src target a:byte )
-readByte:
-  lda Stack + 3, x
+defword "freeze", 0, FREEZE
+  @source := TMP1
+  @target := TMP3
+
+  ; Save register states.
+  sta ASave+1
+  stx XSave+1
+  sty YSave+1
+  tsx
+  stx SPSave+1
+
+  ; Set source pointer
+  lda #<Stack
+  sta @source
+  lda #>Stack
+  sta @source+1
+
+  ; Set target pointer, and source pointer of decompress
+  lda CHERE_VALUE
+  sta SourcePtrLo+1
+  sta @target
+  lda CHERE_VALUE+1
+  sta SourcePtrHi+1
+  sta @target+1
+
+@again:
+  ; Encode a single run
+  lda @source+1
   cmp #>$800
-  beq endOfRam
-  lda (Stack + 2, x)
-  inc Stack + 2, x
-  bne :+
-  inc Stack + 3, x
-: rts
-endOfRam:
-  pla
-  pla ; remove return from readByte
-  rts ; remove to caller of compress
-
-; ( target a:byte -- target a:byte )
-writeByte:
-  sta (Stack, x)
-  inc Stack, x
-  bne @return
-  inc Stack + 1, x
-  pha
-    lda Stack + 1, x
-    cmp #>$800 ; when decompressing, stop when we reach $800
-    beq endDecom
-  pla
-@return:
-  .byte $DF, "rr", 0
-  rts
-endDecom:
-  .byte $DF, "edc", 0
-  pla
-  pla
-  pla
-  rts
-
-; ( src target a:byte -- src target a:count )
-; Counts the number of repetitions of the
-; byte given in the source, from 0 to $FE
-countRepeats:
-  sta TMP2
-  ldy #$FF
+  beq @done
+  ldy #0
+  lda (@source), y
 @loop:
   iny
-  cpy #$FE
-  beq @done
-  lda Stack + 3, x ; high byte of source
-  cmp #>$800 ; check if we've reached the end
-  beq @done
-  jsr readByte
-  cmp TMP2
+  beq @loopEnd
+  cmp (@source), y
   beq @loop
-  lda Stack + 2
-  bne :+
-  dec Stack + 3
-: dec Stack + 2 ; undo reading the byte that doesn't match
-@done:
-  tya
-  rts
+@loopEnd:
+  ; Now we've found the end of the run, or found 256 in a row.
+  sta TMP6
+    dey ; adjust y to 0-FF range
+    ; Increment source to the byte after the run.
+    sty TMP5
+    lda @source
+    sec ; add a plus 1 adjustment
+    adc TMP5
+    sta @source
+    lda @source+1
+    adc #0
+    sta @source+1
+  lda TMP6
 
-; ( src target -- src target )
-defword "decom", 0, DECOMPRESS
-@again:
-  .byte $DF, "ag", 0
-  jsr readByte ; read the first byte
-  sta Last
-  jsr writeByte ; write the byte
-@decomLoop:
-  .byte $DF, "l", 0
-  jsr readByte
-  jsr writeByte
-  cmp Last
-  beq :+
-  sta Last
-  .byte $DF, "start", 0
-  bne @decomLoop ; bra
-: .byte $DF, "same", 0
-  pha ; save value
-    jsr readByte ; read repeat count
-    tay ; move it to y
-  pla
   cpy #0
-  beq @again
-@writeLoop:
-  .byte $DF, "loopy", 0
-  jsr writeByte 
-  dey
-  bne @writeLoop
-  beq @again
+  bne @multiple
+@single:
+  ; A run of a single byte is encoded as itself.
+  ldy #0
+  sta (@target), y
+  beq @incrementTarget ; bra
+@multiple:
+  ; A run of multiple is encoded as 2 repeated bytes, followed by a
+  ; byte indicating the remaining repeats. So 5 0 bytes is encoded as 0 0 3
+  ldy #0
+  sta (@target), y
+  iny
+  sta (@target), y
+  lda TMP5 ; load repeat count - 1
+  sec
+  sbc #1 ; subtract 1 from it 
+  iny
+  sta (@target), y
+
+@incrementTarget:
+  ; y now tells us how far to increment target
+  sty TMP5
+  lda @target
+  sec ; adjust +1, since y is either 0 or 2.
+  adc TMP5
+  sta @target
+  lda @target+1
+  adc #0
+  sta @target+1
+
+  clv
+  bvc @again ; bra
+
+@done:
+  lda @source
+  beq @noOvershoot
+
+  ; The last run has a length that takes it past
+  ; the end of RAM.
+  lda @target
+  sec
+  sbc #1
+  sta @target
+  lda @target+1
+  sbc #0
+  sta @target+1
   
-defword "rest-ram", 0, RESTORE_RAM
-  dex
-  dex
-  lda CHERE_VALUE
-  sta Stack, x
-  lda CHERE_VALUE + 1
-  sta Stack + 1, x
-  push ControlFlowStackEnd
-  jmp DECOMPRESS
+  ldy #0
+  lda (@target), y ; get the length of the last one
+  sec
+  sbc @source ; subtract by the overshoot amount
+  sta (@target), y
+
+  inc @target
+  bne @noOvershoot
+  inc @target+1
+
+@noOvershoot:
+  ; Save end pointer
+  lda @target
+  sta EndPtrLo+1
+  lda @target+1
+  sta EndPtrHi+1
+
+  ; jmp THAW
+  jmp 0 ; signal emulator to stop
 
 defword "save-ram", 0, SAVE_RAM
-  push ControlFlowStackEnd
-  dex
-  dex
-  lda CHERE_VALUE
-  sta Stack, x
-  lda CHERE_VALUE + 1
-  sta Stack + 1, x
-  jmp COMPRESS
+  ; TODO - remove this word
 
 .segment "DICT_CODE"
 CHERE_INIT:

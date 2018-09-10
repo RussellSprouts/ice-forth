@@ -386,22 +386,25 @@ immediate \ mark the word immediate as immediate
 : hex 16 base ! ;
 : decimal 10 base ! ;
 
+: jsr, 32 c, , ;
+: jmp, 76 c, , ;
+
 \ Recursively call the current word
 : recurse immediate
   latest @
-  JSR
+  jsr,
 ;
 
 : recurse-tail immediate
   latest @
-  JMP
+  jmp,
 ;
 
 \ Takes the next word and compiles it even if it's immediate
 : [compile] immediate
   word
   find
-  JSR
+  jsr,
 ;
 
 : 2- 2 - ;
@@ -424,7 +427,7 @@ decimal
 ;
 
 : unless immediate
-  ['] not JSR
+  ['] not jsr,
   [compile] if
 ;
 
@@ -570,9 +573,9 @@ decimal
   128 and
 ;
 
-( Returns the next dictionary entry. Assumes save-ram is the last )
+( Returns the next dictionary entry. Assumes asm-reset is the last )
 : next
-  dup [ ['] save-ram literal ] = if
+  dup [ ['] asm-reset literal ] = if
     drop
     0
   else
@@ -599,7 +602,7 @@ decimal
 ( -- )
 : ." immediate
   compiling? if
-    [ ['] (.') ] literal JSR ( compile jsr (.") )
+    [ ['] (.') ] literal jsr, ( compile jsr (.") )
 
     begin
       key
@@ -849,43 +852,15 @@ hex
 \ Wait a few frames for the PPU to stabilize on power-on
 : wait-for-ppu [
   BEGIN
-    2002 LDA
+    2002 BIT
   UNTILMI
   BEGIN
-    2002 LDA
+    2002 BIT
   UNTILMI
   BEGIN
-    2002 LDA
+    2002 BIT
   UNTILMI
   BEGIN
-    2002 LDA
+    2002 BIT
   UNTILMI
 ] ;
-
-0 c-val last
-variable ram-addr
-( Copies and compresses the RAM )
-: copy-ram
-  clean-stacks
-  0 ram-addr !
-  begin
-    ram-addr @ c@
-    dup last =
-    if
-      ." r "   
-    then
-    to last
-    .
-    ram-addr @ 1+ ram-addr !
-    ram-addr @ 800 =
-  until
-;
-
-( A jump to 0 is treated as a signal to
-  the emulator to stop execution and freeze
-  the ROM )
-: freeze
-  \ save-ram
-  [ 0 JSR ]
-;
-
