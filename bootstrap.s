@@ -1162,6 +1162,10 @@ defword "thaw", 0, THAW
   Source := TMP1
   Target := TMP3
 
+  ; Basic setup
+  sei
+  cld
+
   ; Set source pointer
   ; (Self-modifying code set by freeze)
 SourcePtrLo:
@@ -1248,13 +1252,26 @@ EndPtrHi:
 SPSave:
   ldx #0
   txs
+
+  ; We're going to finish with an rti,
+  ; but rts pushes return-1, while an interrupt
+  ; pushes the return address directly. So,
+  ; we need to increment our return address by 1.
+  inc $101, x
+  bne :+
+  inc $102, x
+:
+
+PSave:
+  lda #0
+  pha ; store processor flag on stack
 ASave:
   lda #0
 XSave:
   ldx #0
 YSave:
   ldy #0
-  rts
+  rti
 
 defword "freeze", 0, FREEZE
   @source := TMP1
@@ -1262,6 +1279,10 @@ defword "freeze", 0, FREEZE
 
   ; Save register states.
   sta ASave+1
+
+  php
+  pla
+  sta PSave+1
   stx XSave+1
   sty YSave+1
   tsx
@@ -1373,7 +1394,6 @@ defword "freeze", 0, FREEZE
   lda @target+1
   sta EndPtrHi+1
 
-  ; jmp THAW
   jmp 0 ; signal emulator to stop
 
 defword "save-ram", 0, SAVE_RAM
