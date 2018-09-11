@@ -11,6 +11,8 @@ local lastLineInput = forthCode:read'*a' .. forthCode2:read'*a'
 
 local trace = false
 
+local reads_and_writes = {}
+
 local m
 m = {
   a = 0, x = 0, y = 0, sp = 0xFF, ip = -1,
@@ -28,6 +30,7 @@ m = {
       return result
     else
       --print(string.format("read %04x: %02x", addr, m.memory[addr]))
+      --reads_and_writes[#reads_and_writes+1] = 'r\t'.. addr
       return m.memory[addr]
     end
   end,
@@ -39,6 +42,7 @@ m = {
       io.write(string.char(val))
       --io.write("]")
     else
+      reads_and_writes[#reads_and_writes+1] = 'w\t'..addr.."\t"..bit.band(val, 0xFF)
       m.memory[addr] = bit.band(val, 0xFF)
     end
   end,
@@ -576,6 +580,7 @@ Execution halted. Freezing ROM
 
 local romout = io.open('out.nes', 'w')
 local ramout = io.open('ram.out', 'w')
+local oplog = io.open('ops.out', 'w')
 
 romout:write("NES\x1A\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
 
@@ -585,4 +590,8 @@ end
 
 for i = 0, 0x7FF do
   ramout:write(string.char(m.memory[i]))
+end
+
+for i = 1, #reads_and_writes do
+  oplog:write(reads_and_writes[i], '\n')
 end

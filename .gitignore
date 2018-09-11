@@ -3,3 +3,4 @@
 *.o
 debug.txt
 bootstrap.bin
+ops.out

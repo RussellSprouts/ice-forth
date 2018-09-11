@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head>
+<title>Operation Visualization</title>
+</head>
+<body style="background-color: #fdd">
+  <input type="file" id="files" multiple />
+  <button id="submit">Submit</button>
+  <canvas id="c" width=1024 height=1024></canvas>
+  <script>
+    let c = document.getElementById('c');
+    let ctx = c.getContext('2d');
+
+    function setPixel(x, y, c) {
+      ctx.fillStyle = c;
+      ctx.fillRect(x*4, y*4, 4, 4);
+    }
+
+    let memoryState, ops;
+
+    function byte2Color(b) {
+      let shade = Math.floor(b / 16).toString(16);
+      return '#' + shade + shade + shade;
+    }
+  
+    let op = 0;
+    let ops_per_frame = 1024;
+    function startAnimation() {
+      for (let i = 0; i < ops_per_frame; i++) {
+        let [opType, addr, val] = ops[op++].split('\t')
+        if (opType == 'w') {
+          setPixel(addr % 256, Math.floor(addr / 256), byte2Color(val % 256));
+        }
+      }
+
+      requestAnimationFrame(startAnimation);
+    }
+
+    function redraw() {
+      if (memoryState != null) {
+        for (let i = 0; i < memoryState.byteLength; i++) {
+          setPixel(i % 256, Math.floor(i / 256), byte2Color(memoryState[i])); 
+        }
+      }
+  
+      if (memoryState != null && ops != null) {
+        requestAnimationFrame(startAnimation);
+      }
+    }
+
+    document.getElementById("submit").onclick = function() {
+      let files = document.getElementById("files").files;
+      for (let f of files) {
+        let reader = new FileReader();
+
+        reader.onloadend = function () {
+          if (reader.result.byteLength === 65536) {
+            memoryState = new Uint8Array(reader.result);
+            console.log(memoryState[0]);
+          } else {
+            ops = new TextDecoder('utf-8').decode(reader.result).split('\n');
+          }
+          console.log(reader.result);
+          redraw();
+        }
+
+        reader.readAsArrayBuffer(f);
+      }
+    }
+    
+  </script>
+</body>
+</html>
