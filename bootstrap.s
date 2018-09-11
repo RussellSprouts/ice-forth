@@ -26,6 +26,10 @@
 ; as the dictionary entry.
 
 .macpack generic
+.include "forth.inc"
+
+.import DICT_END
+.import CHERE_INIT
 
 ; The simulator uses this address as the IO port.
 ; A write to this address will output that character
@@ -33,7 +37,6 @@
 ; stdin, possibly blocking, since the simulator reads line-by-
 ; line.
 IO_PORT := $401C
-.export IO_PORT
 ; Flags for the dictionary entries.
 ; The word should execute immediately even in compile mode
 F_IMMED = $80
@@ -45,10 +48,9 @@ F_INLINE = $40
 .segment "DICT"
 ; Reserve space to push the dictionary to the end of the memory
 ; space, since it now grows down.
-.res $E00
+.res $CDA
 
 .segment "ZEROPAGE": zeropage
-.exportzp TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
 TMP1: .res 1
 TMP2: .res 1
 TMP3: .res 1
@@ -59,7 +61,6 @@ TMP7: .res 1
 TMP8: .res 1
 
 Stack: .res 40
-.exportzp Stack
 Stack_End: .res 8 ; buffer zone
 
 ControlFlowSP: .res 1
@@ -69,119 +70,6 @@ ControlFlowStackEnd:
 .segment "RAM"
 ; Reserve the hardware stack.
 RStack: .res $100
-
-; Pushes the given value onto the stack.
-.macro push val
-  dex
-  dex
-  lda #<val
-  sta Stack, x
-  lda #>val
-  sta Stack+1, x
-.endmacro
-
-; Removes the top of stack.
-.macro pop
-  inx
-  inx
-.endmacro
-
-.macro toTMP1
-  lda Stack, x
-  sta TMP1
-  lda Stack+1, x
-  sta TMP2
-.endmacro
-
-.macro fromTMP1
-  lda TMP1
-  sta Stack, x
-  lda TMP2
-  sta Stack+1, x
-.endmacro
-
-; The structure of a dictionary entry.
-.struct DictEntry
-  Jmp .byte
-  CodePtr .word
-  Flags2 .byte
-  ; The length of the name. Also includes the flags
-  Len .byte
-  ; The entry name
-  Name .byte
-.endstruct
-
-; The simulator treats $FF as a command to start
-; logging each instruction for debugging.
-.macro DEBUG_START
-  .byte $FF
-.endmacro
-
-; The simulator treats $EF as a command to stop
-; logging each instruction.
-.macro DEBUG_END
-  .byte $EF
-.endmacro
-
-; The simulator treats $DF as a command to print
-; out the next bytes until a zero character.
-.macro DEBUG_TRACE str
-   .byte $DF
-   .asciiz str
-.endmacro
-
-; New dictionary format, unifying xt and dictionary entry.
-; jmp CODE_IMPL
-; .word LINK
-; .word IMMEDIATE | HIDDEN | LEN
-; .byte "DUP"
-; 
-; The dictionary entry length does not change - once it is created
-; with a name, it is fixed. However, we can update the jmp CODE_IMPL
-; instruction to move the code around.
-.macro defword name, flags, label
-  .segment "DICT"
-    label:
-    .export label
-    jmp .ident(.concat(.string(label), "_IMPL"))
-    ; length and name
-    .byte 0
-    .byte .strlen(name) | flags
-    .byte name
-  .segment "DICT_CODE"
-    .ident(.concat(.string(label), "_IMPL")):
-.endmacro
-
-; Variables are a special kind of word which reserve
-; two bytes of space in the VARIABLES segment, and when
-; executed, push that address on the stack.
-.macro defvar name, init, label
-  defword name, 0, label
-    push .ident(.concat(.string(label), "_VALUE"))
-    rts
-  .segment "VARIABLES"
-  .ident(.concat(.string(label), "_VALUE")):
-  .word init
-.endmacro
-
-; The same as a variable, except it is allocated in the zero
-; page.
-.macro defvarzp name, init, label
-  defword name, 0, label
-    push .ident(.concat(.string(label), "_VALUE"))
-    rts
-  .segment "ZEROPAGE": zeropage
-  .ident(.concat(.string(label), "_VALUE")):
-  .word init
-.endmacro
-
-; A constant is a word which pushes its value onto the stack
-; when it is executed.
-.macro defconst name, value, label
-  defword name, 0, label
-    push value
-    rts
-.endmacro
 
 defconst "dict::impl", DictEntry::CodePtr, DictEntryCodePtr
 defconst "dict::len", DictEntry::Len, DictEntryLen
@@ -540,10 +428,10 @@ defword "find", 0, FIND
 
   ; Check if current is past the end.
   lda LPointer + 1
-  cmp #>SAVE_RAM ; SAVE_RAM is last in the dictionary.
+  cmp #>DICT_END ; DICT_END is last in the dictionary.
   blt @loop
   lda LPointer
-  cmp #<SAVE_RAM
+  cmp #<DICT_END
   ble @loop
 
 @notFound:
@@ -616,10 +504,10 @@ defword "rfind", 0, RFIND
   sta @LPointer+1
 
   lda @LPointer+1
-  cmp #>SAVE_RAM ; assumes SAVE_RAM is the last entry in the dictionary
+  cmp #>DICT_END ; assumes DICT_END is the last entry in the dictionary
   blt @loop
   lda @LPointer
-  cmp #<SAVE_RAM
+  cmp #<DICT_END
   beq @loop
   blt @loop
 @notFound:
@@ -1394,12 +1282,6 @@ defword "freeze", 0, FREEZE
   sta EndPtrHi+1
 
   jmp 0 ; signal emulator to stop
-
-defword "save-ram", 0, SAVE_RAM
-  ; TODO - remove this word
-
-.segment "DICT_CODE"
-CHERE_INIT:
 
 .segment "CODE"
 

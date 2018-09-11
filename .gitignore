@@ -4,3 +4,5 @@
 debug.txt
 bootstrap.bin
 ops.out
+ram.out
+*.nes.deb

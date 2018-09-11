@@ -22,24 +22,52 @@
 ; CC65) to have a Forth interface.
 ; ---------------------------------------------------------------------------
 
-;NMI handler
 
-nmi:
+.include "forth.inc"
+
+.macpack generic
+.macpack longbranch
+
+.export PPU_MASK_VAR
+defcval "vppu-mask", 0, PPU_MASK_VAR
+defcval "vppu-ctrl", 0, PPU_CTRL_VAR
+defcval "vppu-stat", 0, PPU_STATUS_VAR
+defcval "scroll-x", 0, SCROLL_X_VAR
+defcval "scroll-y", 0, SCROLL_Y_VAR
+
+.segment "ZEROPAGE"
+; Initialize color brightness to normal.
+PAL_SPR_PTR: .word palBrightTable4
+PAL_BG_PTR: .word palBrightTable4
+
+.segment "RAM"
+.align 256
+; Initialize OAM buffer with $FF to hide all sprites.
+OAM_BUF: .res 256, $FF
+PAL_BUF: .res 32, $20
+FRAME_CNT1: .res 1
+PAL_UPDATE: .res 1
+NAME_UPD_ENABLE: .res 1
+VRAM_UPDATE: .res 1
+
+.segment "CODE"
+
+; NMI handler
+defword "nmi", 0, NMI
   pha
   txa
   pha
   tya
   pha
 
-  lda PPU_MASK_VAR ;if rendering is disabled, do not access the VRAM at all
+  lda PPU_MASK_VAR_VALUE ;if rendering is disabled, do not access the VRAM at all
   and #%00011000
-  bne @doUpdate
-  jmp @skipAll
+  jeq @skipAll
 
 @doUpdate:
 
   lda #>OAM_BUF   ;update OAM
-  sta PPU_OAM_DMA
+  sta $4014
 
   lda PAL_UPDATE   ;update palette if needed
   bne @updPal
@@ -51,35 +79,35 @@ nmi:
   stx PAL_UPDATE
 
   lda #$3f
-  sta PPU_ADDR
-  stx PPU_ADDR
+  sta $2006
+  stx $2006
 
   ldy PAL_BUF       ;background color, remember it in X
   lda (PAL_BG_PTR),y
-  sta PPU_DATA
+  sta $2007
   tax
 
   .repeat 3,I
   ldy PAL_BUF+1+I
   lda (PAL_BG_PTR),y
-  sta PPU_DATA
+  sta $2007
   .endrepeat
 
   .repeat 3,J
-  stx PPU_DATA      ;background color
+  stx $2007      ;background color
   .repeat 3,I
   ldy PAL_BUF+5+(J*4)+I
   lda (PAL_BG_PTR),y
-  sta PPU_DATA
+  sta $2007
   .endrepeat
   .endrepeat
 
   .repeat 4,J
-  stx PPU_DATA      ;background color
+  stx $2007      ;background color
   .repeat 3,I
   ldy PAL_BUF+17+(J*4)+I
   lda (PAL_SPR_PTR),y
-  sta PPU_DATA
+  sta $2007
   .endrepeat
   .endrepeat
 
@@ -98,31 +126,23 @@ nmi:
 @skipUpd:
 
   lda #0
-  sta PPU_ADDR
-  sta PPU_ADDR
+  sta $2006
+  sta $2006
 
-  lda SCROLL_X
-  sta PPU_SCROLL
-  lda SCROLL_Y
-  sta PPU_SCROLL
+  lda SCROLL_X_VAR_VALUE
+  sta $2005
+  lda SCROLL_Y_VAR_VALUE
+  sta $2005
 
-  lda PPU_CTRL_VAR
-  sta PPU_CTRL
+  lda PPU_CTRL_VAR_VALUE
+  sta $2000
 
 @skipAll:
 
-  lda PPU_MASK_VAR
-  sta PPU_MASK
+  lda PPU_MASK_VAR_VALUE
+  sta $2001
 
   inc FRAME_CNT1
-  inc FRAME_CNT2
-  lda FRAME_CNT2
-  cmp #6
-  bne @skipNtsc
-  lda #0
-  sta <FRAME_CNT2
-
-@skipNtsc:
 
   jsr FamiToneUpdate
 
@@ -134,18 +154,21 @@ nmi:
 
 irq:
 
-    rti
+  rti
+
+FamiToneUpdate:
+  rts
 
 ; Set bg and spr palettes, data is 32 bytes array
 ; ( palette-buffer -- )
-pal_all:
+defword "pal!", 0, pal_all
   toTMP1
   lda #$20
 
 ; Given a length in A, sets the palette buffer
 ; given the buffer address in TMP1-2
 pal_copy:
-  sta <LEN
+  sta TMP3
 
   ldy #0
 
@@ -153,34 +176,34 @@ pal_copy:
   lda (TMP1), y
   sta PAL_BUF, y
   iny
-  dec LEN
+  dec TMP3
   bne @0
 
-  inc <PAL_UPDATE
+  inc PAL_UPDATE
 
   pop
   rts
 
 ; Set bg palette only, data is 16 bytes array
 ; ( palette-buffer -- )
-pal_bg:
+defword "pal-bg!", 0, pal_bg
   toTMP1
   lda #$10
   bne pal_copy ; bra
 
 ; Set spr palette only, data is 16 bytes array
 ; ( palette-buffer -- )
-pal_spr:
+defword "pal-spr!", 0, pal_spr
   toTMP1
   lda #$10  
-  sta <LEN
+  sta TMP3
   ldy #0
 
 @0:
   lda (TMP1), y
   sta PAL_BUF + $10, y
   iny
-  dec LEN
+  dec TMP3
   bne @0
 
   inc <PAL_UPDATE
@@ -189,19 +212,19 @@ pal_spr:
 
 ; Set a palette entry. index is 0..31
 ; ( index color -- )
-pal_col:
+defword "pal-col!", 0, pal_col
   ldy Stack+2, x
   lda Stack, x
   and #$1f
   sta PAL_BUF, y
-  inc <PAL_UPDATE
+  inc PAL_UPDATE
   pop
   pop
   rts
 
 ; reset palette to $0F
 ; ( -- )
-pal_clear:
+defword "pal-clear", 0, pal_clear
   lda #$0F
   ldy #0
 
@@ -215,19 +238,19 @@ pal_clear:
 
 ; Set virtual bright for background only
 ; ( brightness -- )
-pal_spr_bright:
+defword "pal-spr-bright", 0, pal_spr_bright
   ldy Stack, x
   lda palBrightTableL, y
-  sta <PAL_SPR_PTR
+  sta PAL_SPR_PTR
   lda palBrightTableH, y
-  sta <PAL_SPR_PTR+1
-  sta <PAL_UPDATE
+  sta PAL_SPR_PTR+1
+  sta PAL_UPDATE
   pop
   rts
 
 ; Set virtual bright for sprites only
 ; ( brightness -- )
-pal_bg_bright:
+defword "pal-bg-bright", 0, pal_bg_bright
   ldy Stack, x
   lda palBrightTableL, y
   sta <PAL_BG_PTR
@@ -239,14 +262,14 @@ pal_bg_bright:
 
 ; Set virtual bright both for sprites and background.
 ; 0 is black, 4 is normal, 8 is white.
-pal_bright:
+defword "pal-bright", 0, pal_bright
   jsr DUP
   jsr pal_spr_bright
   jmp pal_bg_bright
 
 ; Turn off rendering, nmi still enabled when rendering is disabled.
 ; ( -- )
-ppu_off:
+defword "ppu-off", 0, ppu_off
   lda PPU_MASK_VAR
   and #%11100111
   sta PPU_MASK_VAR
@@ -254,7 +277,7 @@ ppu_off:
 
 ; Turn on bg, spr
 ; ( -- )
-ppu_on_all:
+defword "ppu-on-all", 0, ppu_on_all
   lda PPU_MASK_VAR
   ora #%00011000
 
@@ -264,21 +287,21 @@ ppu_onoff:
 
 ; Turn on bg only
 ; ( -- )
-ppu_on_bg:
+defword "ppu-on-bg", 0, ppu_on_bg
   lda PPU_MASK_VAR
   ora #%00001000
   bne ppu_onoff ; bra
 
 ; Turn on spr only
 ; ( -- )
-ppu_on_spr:
+defword "ppu-on-spr", 0, ppu_on_spr
   lda PPU_MASK_VAR
   ora #%00010000
   bne ppu_onoff ; bra
 
 ; Clear OAM buffer -- all sprites are hidden
 ; ( -- )
-oam_clear:
+defword "oam-clear", 0, oam_clear
   ldy #0
   lda #$FF
 @1:
@@ -292,17 +315,17 @@ oam_clear:
 
 ; Set sprite display mode. False for 8x8, true for 8x16
 ; ( flag -- )
-oam_size:
+defword "oam-size", 0, oam_size
   ldy #0
   lda Stack, x
   ora Stack+1, x
   beq :+
   ldy #%00100000
 : sty TMP1
-  lda <PPU_CTRL_VAR
+  lda PPU_CTRL_VAR
   and #%11011111
   ora TMP1
-  sta <PPU_CTRL_VAR
+  sta PPU_CTRL_VAR
 
   rts
 
@@ -310,7 +333,7 @@ oam_size:
 ; attribute, sprid is offset in OAM in bytes
 ; returns sprid+4 which is offset for the next sprite
 ; ( x y chrnum attr sprid -- new-sprite-id )
-oam_spr:
+defword "oam-spr", 0, oam_spr
   ldy Stack, x ; get sprite ID
 
   lda Stack+2, x ; attribute
@@ -348,7 +371,7 @@ oam_meta_spr:
 
 ; hide all remaining sprites from given offset
 ; ( sprid -- )
-oam_hide_rest:
+defword "oam-hide-rest", 0, oam_hide_rest
   ldy Stack, x
   lda #240
 @1:
@@ -364,7 +387,7 @@ oam_hide_rest:
 
 ; Wait actual TV frame, 50hz for PAL, 60hz for NTSC
 ; ( -- )
-ppu_wait_nmi:
+defword "ppu-wait-nmi", 0, ppu_wait_nmi
   lda #1
   sta VRAM_UPDATE
   lda FRAME_CNT1
@@ -373,50 +396,6 @@ ppu_wait_nmi:
   cmp FRAME_CNT1
   beq @1
   rts
-
-; unpack RLE data to current address of VRAM, works only when rendering is
-; off.
-; ( data -- )
-vram_unrle:
-  ldy Stack, x
-  lda Stack+1, x
-  sta RLE_HIGH
-  lda #0
-  sta RLE_LOW
-
-  lda (RLE_LOW), y
-  sta RLE_TAG
-  iny
-  bne @1
-  inc RLE_HIGH
-
-@1:
-  lda (RLE_LOW), y
-  iny
-  bne @11
-  inc RLE_HIGH
-
-@11:
-  cmp RLE_TAG
-  beq @2
-  sta PPU_DATA
-  sta RLE_BYTE
-  bne @1
-
-@2:
-  lda (RLE_LO), y
-  beq @4
-  iny
-  bne @21
-  inc RLE_HIGH
-
-@21:
-  ; TODO - finish
-
-; Set scroll, including rhe top bits
-; It is always applied at beginning of TV frame, not at function call
-; ( x y -- )
-scroll: ; TODO
 
 ; Set scroll after screen split invoken by the sprite 0 hit.
 ; warning: all CPU time between the function call and the actual split
@@ -427,16 +406,16 @@ split: ; TODO
 
 ; Select current bank for sprites 0..1
 ; ( n -- )
-bank_spr:
+defword "bank-spr", 0, bank_spr
   lda Stack, x
   and #1
   asl
   asl
   asl
-  sta <TMP1
+  sta TMP1
   lda PPU_CTRL_VAR
   and #%11110111
-  ora TEMP
+  ora TMP1
   sta PPU_CTRL_VAR
   pop
 
@@ -444,17 +423,17 @@ bank_spr:
 
 ; Select current bank for background, 0..1
 ; ( n -- )
-bank_bg:
+defword "bank-bg", 0, bank_bg
   lda Stack, x
   and #1
   asl
   asl
   asl
   asl
-  sta TEMP
+  sta TMP1
   lda PPU_CTRL_VAR
   and #%11101111
-  ora TEMP
+  ora TMP1
   sta PPU_CTRL_VAR
 
   rts
@@ -469,9 +448,10 @@ vram_read: ; TODO
 ; ( src size -- )
 vram_write: ; TODO
 
+.export delay
 ; delay for N frames
 ; ( frames -- )
-delay:
+defword "delay", 0, delay
   ldy Stack, x
 
 @1:
@@ -481,6 +461,8 @@ delay:
 
   pop 
   rts
+
+_flush_vram_update_nmi: rts
 
 palBrightTableL:
 

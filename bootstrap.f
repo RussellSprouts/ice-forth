@@ -575,7 +575,7 @@ decimal
 
 ( Returns the next dictionary entry. Assumes asm-reset is the last )
 : next
-  dup [ ['] asm-reset literal ] = if
+  dup [ ['] E literal ] = if
     drop
     0
   else
@@ -710,6 +710,9 @@ hex
 : set-nmi! 0FFFA ! ;
 ( xt -- )
 : set-irq! 0FFFE ! ;
+
+
+['] thaw set-reset!
 
 ( Ends an interrupt handler definiton )
 : ;int immediate
