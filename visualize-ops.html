@@ -4,16 +4,20 @@
 <title>Operation Visualization</title>
 </head>
 <body style="background-color: #fdd">
+  <textarea style="float:left;width:20%;height:768px" id="text"></textarea>
+  <canvas style="float:right" id="c" width=768 height=768></canvas>
+  <hr style="clear:both"/>
+  <label>Choose bootstrap.bin and ops.out
   <input type="file" id="files" multiple />
+  </label>
   <button id="submit">Submit</button>
-  <canvas id="c" width=1024 height=1024></canvas>
   <script>
     let c = document.getElementById('c');
     let ctx = c.getContext('2d');
 
     function setPixel(x, y, c) {
       ctx.fillStyle = c;
-      ctx.fillRect(x*4, y*4, 4, 4);
+      ctx.fillRect(x*3, y*3, 3, 3);
     }
 
     let memoryState, ops;
@@ -24,12 +28,22 @@
     }
   
     let op = 0;
-    let ops_per_frame = 1024;
+    let ops_per_frame = 1e6;
+    let chars_per_frame = 16;
+    let source = "";
     function startAnimation() {
+      let chars = 0;
       for (let i = 0; i < ops_per_frame; i++) {
         let [opType, addr, val] = ops[op++].split('\t')
         if (opType == 'w') {
           setPixel(addr % 256, Math.floor(addr / 256), byte2Color(val % 256));
+        } else if (opType == 'r') {
+          chars++;
+          source = source + String.fromCharCode(+addr);
+          let textarea = document.getElementById('text');
+          textarea.innerHTML = source;
+          textarea.scrollTop = textarea.scrollHeight;
+          if (chars === chars_per_frame) break;
         }
       }
 

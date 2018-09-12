@@ -26,6 +26,7 @@ m = {
         lastLineInput = io.read("*l") .. '\n'
       end
       local result = lastLineInput:byte()
+      reads_and_writes[#reads_and_writes+1] = 'r\t' .. result
       lastLineInput = lastLineInput:sub(2)
       return result
     else
@@ -584,8 +585,8 @@ local oplog = io.open('ops.out', 'w')
 
 romout:write("NES\x1A\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
 
-for i = 0, 0x7FFF do
-  romout:write(string.char(m.memory[i + 0x8000]))
+for i = 0x8000, 0xFFFF do
+  romout:write(string.char(m.memory[i]))
 end
 
 for i = 0, 0x7FF do
