@@ -7,7 +7,7 @@ defvar "vhere", VHERE_VALUE+2, VHERE
 
 ; A marker for the end of the dictionary. This must be linked last.
 .export DICT_END
-defword "E", 0, DICT_END
+defword "E", F_END, DICT_END
   rts
 
 .segment "DICT_CODE"

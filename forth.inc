@@ -9,6 +9,7 @@
 .globalzp F_IMMED
 .globalzp F_INLINE
 .globalzp F_HIDDEN
+.global F_END
 
 ; Temporary storage
 .globalzp TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
@@ -99,8 +100,8 @@
     .export label
     jmp .ident(.concat(.string(label), "_IMPL"))
     ; length and name
-    .byte 0
-    .byte .strlen(name) | flags
+    .byte >flags
+    .byte .strlen(name) | <flags
     .byte name
   .segment "DICT_CODE"
     .ident(.concat(.string(label), "_IMPL")):

@@ -567,15 +567,21 @@ decimal
   32 and
 ;
 
+: ?end
+  dict::flags +
+  c@
+  128 and
+;
+
 : ?immediate
   dict::len +
   c@
   128 and
 ;
 
-( Returns the next dictionary entry. Assumes asm-reset is the last )
+( Returns the next dictionary entry. )
 : next
-  dup [ ['] E literal ] = if
+  dup ?end if
     drop
     0
   else

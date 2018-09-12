@@ -45,11 +45,13 @@ F_IMMED = $80
 F_HIDDEN = $20
 ; Always inline the word
 F_INLINE = $40
+; This is the last entry in the dictionary
+F_END = $8000
 
 .segment "DICT"
 ; Reserve space to push the dictionary to the end of the memory
 ; space, since it now grows down.
-.res $CC8
+.res $CB8
 
 .segment "ZEROPAGE": zeropage
 TMP1: .res 1
@@ -74,6 +76,7 @@ RStack: .res $100
 
 defconst "dict::impl", DictEntry::CodePtr, DictEntryCodePtr
 defconst "dict::len", DictEntry::Len, DictEntryLen
+defconst "dict::flags", DictEntry::Flags2, DictEntryFlags
 defconst "dict::name", DictEntry::Name, DictEntryName
 
 defconst "c-sp", ControlFlowSP, C_SP
@@ -410,6 +413,12 @@ defword "dfind", 0, DFIND
 
 @next:
 
+  ; Check if this is the last dictionary entry
+  ldy #(DictEntry::Flags2)
+  lda (LPointer), y
+  and #>F_END
+  bne @notFound
+
   ldy #(DictEntry::Len)
   lda (LPointer), y
   and #$1F ; TODO - magic constant
@@ -428,13 +437,8 @@ defword "dfind", 0, DFIND
   adc LPointer + 1
   sta LPointer + 1 ; add the other bytes of the header.
 
-  ; Check if current is past the end.
-  lda LPointer + 1
-  cmp #>DICT_END ; DICT_END is last in the dictionary.
-  blt @loop
-  lda LPointer
-  cmp #<DICT_END
-  ble @loop
+  clv
+  bvc @loop ; bra
 
 @notFound:
   dex
