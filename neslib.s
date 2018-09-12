@@ -462,6 +462,10 @@ defword "delay", 0, delay
   pop 
   rts
 
+defword "oam", 0, OAM_BUFFER_LOC
+  push OAM_BUF
+  rts
+
 _flush_vram_update_nmi: rts
 
 palBrightTableL:

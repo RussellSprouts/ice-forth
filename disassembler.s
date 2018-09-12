@@ -546,7 +546,7 @@ Instruction:
   iny
 @special_txs:
   ; now y is 0 for txs, 1 for tya, and 2 for txa.
-  lda #'t'
+  lda #'T'
   sta IO_PORT
   lda @special2, y
   sta IO_PORT

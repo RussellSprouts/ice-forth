@@ -30,6 +30,7 @@
 
 .import DICT_END
 .import CHERE_INIT
+.import VHERE, VHERE_VALUE
 
 ; The simulator uses this address as the IO port.
 ; A write to this address will output that character
@@ -48,7 +49,7 @@ F_INLINE = $40
 .segment "DICT"
 ; Reserve space to push the dictionary to the end of the memory
 ; space, since it now grows down.
-.res $CDA
+.res $CC8
 
 .segment "ZEROPAGE": zeropage
 TMP1: .res 1
@@ -192,7 +193,7 @@ defword "c!", 0, CSTORE
 
 defword "@", 0, FETCH
   toTMP1
-
+  
   ldy #0
   lda (TMP1), y
   sta Stack, x
@@ -360,19 +361,20 @@ defword "number", 0, NUMBER
 
 defvarzp "latest", DictEntryCodePtr, LATEST
 
-; ( str-ptr len -- dictionary-pointer )
-; or ( str-ptr len -- str-ptr len 0 ) if it wasn't found
-; Searches the dictionary for a definition of the given word.
-defword "find", 0, FIND
-
+; ( str-ptr len dict-start -- dictionary-pointer )
+; or ( str-ptr len dict-start -- str-ptr len 0 ) if it wasn't found
+; Searches the dictionary at the given start for the given word.
+defword "dfind", 0, DFIND
   LPointer := TMP1
   MyStr := TMP3
 
-  lda LATEST_VALUE
+  lda Stack, x
   sta LPointer
-  lda LATEST_VALUE+1
-  sta LPointer+1 ; load LATEST into LPointer
-
+  lda Stack+1, x
+  sta LPointer+1
+  inx
+  inx
+  
   sec
   lda Stack+2, x
   sbc #<(DictEntry::Name)
@@ -448,6 +450,19 @@ defword "find", 0, FIND
   lda LPointer+1
   sta Stack+1, x
   rts
+
+; ( str-ptr len -- dictionary-pointer )
+; or ( str-ptr len -- str-ptr len 0 ) if it wasn't found
+; Searches the dictionary for a definition of the given word.
+defword "find", 0, FIND
+
+  dex
+  dex
+  lda LATEST_VALUE
+  sta Stack, x
+  lda LATEST_VALUE+1
+  sta Stack+1, x
+  jmp DFIND
 
 ; Given a pointer, gets the name of the dictionary entry,
 ; or an empty string if it's not in the dictionary.
@@ -987,9 +1002,6 @@ defword ".", 0, DOT
 
 HexDigits: .byte "0123456789ABCDEF"
 
-
-; Variable which points to the next free variable RAM space.
-defvar "vhere", VHERE_VALUE+2, VHERE
 
 ; Prints out the following bytes as a zero-terminated string.
 ; Use like:
