@@ -11,7 +11,7 @@ val colors
     ppu-wait-nmi
     colors 1+ 7 and to colors
 
-    colors rol rol rol to vppu-mask
+    colors asl asl asl asl asl to vppu-mask
   0 until
 ;
 

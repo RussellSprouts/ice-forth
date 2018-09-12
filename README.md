@@ -120,3 +120,49 @@ entry pointers are the same.
 The code is compiled to subrouting-threaded code with many inlined
 functions. Try `['] val >impl disas` to the see the disassembly
 for the `val` word.
+
+### Assembler/Disassembler
+
+The bootstrap assembly includes a 6502 assembler and disassembler.
+Having all 130+ instructions in the dictionary would be too much,
+so information about each instruction is stored in a more compact form.
+The main data table stores only 4 nibbles (2 bytes) for each instruction.
+These 4 values give the indices of the 3 opcode letters, and the addressing
+mode. For example, from `disassembler.s`:
+
+```
+FirstLetter:  .byte "ABCDEIJLNOPRST"
+```
+
+Each instruction has a value from 0-13 indicating the index of the first
+letter of the opcode in this list of letters. There are similar lists for
+the second and third letters of each opcode. A slight complication arises
+for the second letters. Among all of the opcodes, there are 18 different
+letters used. The easiest way to work around this is to have special cases
+for `txa`, `tya`, and `txs`, which are the only instructions which use
+x or y as the second letter. This brings the list of second letters down
+to 16.
+
+To save a bit more space, we make use of the fact that there are no
+legal 6502 instructions which end in the binary sequence `%11`. These are
+excluded from the table of instructions, giving 25% savings.
+
+The syntax of the assembler is based on the [https://docs.google.com/document/d/16Sv3Y-3rHPXyxT1J3zLBVq4reSPYtY2G6OSojNTm4SQ/edit#](Typist's Assembler Notation). To indicate the addressing mode
+of an instruction, a tail like `.ZX` is added, here indicating the ZeroPage,X
+addressing mode.
+
+When a dictionary lookup fails, the Forth interpreter will try to parse
+the word as an instruction. If it succeeds, then it will either execute
+or compile the instruction word. An instruction word has these semantics:
+
+1. At runtime, appends the instruction and its arguments to the code area
+at `chere`. For example, a Forth definition for LDA would look like this:
+
+```
+( addr -- )
+: LDA  [ hex ] AD c, , ;
+```
+
+2. At compile time, compiles a call to `[asm]` (`RUN_ASM`), with inline
+parameters indicating the opcode and number of argument bytes for the
+instruction. `[asm]` will handle the runtime semantics of the instruction.

@@ -34,42 +34,72 @@
   absy = $C0
 .endenum
 
+; Letters used in the instruction names.
+; We can only support up to 16 of each,
+; so that they can be referenced with
+; 4 bits. These are the values we want in the
+; sets, where x indicates that we don't care.
+; FirstLetter:  .byte "ABCDEIJLNOPRSTxx"
+; SecondLetter: .byte "ABCDEHILMNOPRSTV"
+; ThirdLetter:  .byte "ACDEIKLPQRSTVXYx"
+
+; By re-arranging the letters, we can overlap the lists and save space:
+SecondLetter:
+  .byte "HMV" ; only second
+FirstLetter:
+  ; Overlap of first and second
+  .byte "BNO"
+ThirdLetter:
+  ; Overlap of all 3
+  .byte "ACDEILPRST"
+  ; Overlap of first and third
+  .byte "JKQ"
+  ; Only third
+  .byte "VXY"
+
+; The resulting lists look like this:
+; FirstLetter:  .byte "BNOACDEILPRSTJKQ"
+; SecondLetter: .byte "HMVBNOACDEILPRST"
+; ThirdLetter:  .byte "ACDEILPRSTJKQVXY"
+
 ; Enum for first letter in an instruction
 .enum l1
-  A_
   B
+  N
+  O
+  A_
   C
   D
   E
   I
-  J
   L
-  N
-  O
   P
   R
   S
   T
+  J
+  K_unused
+  Q_unused
 .endenum
 
 ; Enum for second letter in an instruction
 .enum l2
-  A_ = $0
-  B = $10
-  C = $20
-  D = $30
-  E = $40
-  H = $50
-  I = $60
-  L = $70
-  M = $80
-  N = $90
-  O = $A0
-  P = $B0
-  R = $C0
-  S = $D0
-  T = $E0
-  V = $F0
+  H = $00
+  M = $10
+  V = $20
+  B = $30
+  N = $40
+  O = $50
+  A_= $60
+  C = $70
+  D = $80
+  E = $90
+  I = $A0
+  L = $B0
+  P = $C0
+  R = $D0
+  S = $E0
+  T = $F0
 .endenum
 
 ; Enum for third letter in an instruction
@@ -79,25 +109,18 @@
   D
   E
   I
-  K
   L
   P
-  Q
   R
   S
   T
+  J_unused
+  K
+  Q
   V
   X_
   Y_
 .endenum
-
-; Letters used in the instruction names.
-; We can only support up to 16 of each,
-; so that they can be referenced with
-; 4 bits.
-FirstLetter:  .byte "ABCDEIJLNOPRST"
-SecondLetter: .byte "ABCDEHILMNOPRSTV"
-ThirdLetter:  .byte "ACDEIKLPQRSTVXYA" ; pad end to 16 characters with a.
 
 message: .byte "(.')", $0A, ".byte ", $22, $0
 
