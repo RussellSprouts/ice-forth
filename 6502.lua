@@ -83,9 +83,10 @@ m = {
     m.ip = m.ip + 1
     return m.read(bit.band(m.read(m.ip) + m.y, 0xFF))
   end,
-  storeZeroPageY = function()
+  storeZeroPageY = function(val)
     m.ip = m.ip + 1
-    return m.set(bit.band(m.read(m.ip) + m.y, 0xFF), val)
+    local addr = m.read(m.ip) + m.y
+    return m.set(bit.band(addr, 0xFF), val)
   end,
   readAbsolute = function()
     return m.read(m.getAbsolute())
