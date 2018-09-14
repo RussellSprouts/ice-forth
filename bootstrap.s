@@ -51,7 +51,7 @@ F_END = $8000
 .segment "DICT"
 ; Reserve space to push the dictionary to the end of the memory
 ; space, since it now grows down.
-.res $CB8
+.res $C8D
 
 .segment "ZEROPAGE": zeropage
 TMP1: .res 1
@@ -63,11 +63,11 @@ TMP6: .res 1
 TMP7: .res 1
 TMP8: .res 1
 
-Stack: .res 40
+Stack: .res 80
 Stack_End: .res 8 ; buffer zone
 
 ControlFlowSP: .res 1
-ControlFlowStack: .res 10
+ControlFlowStack: .res 32
 ControlFlowStackEnd:
 
 .segment "RAM"

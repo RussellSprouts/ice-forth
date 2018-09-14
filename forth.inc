@@ -18,7 +18,7 @@
 .globalzp Stack, Stack_End
 
 ; The control flow stack
-.globalzp ControlFlowSp, ControlFlowStack, ControlFlowStackEnd
+.globalzp ControlFlowSP, ControlFlowStack, ControlFlowStackEnd
 
 ; The return stack
 .global RStack
