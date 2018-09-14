@@ -178,11 +178,11 @@ To assist in debugging, these extra instructions are added:
 - `$EF` exits debug mode.
 - `$DF` Takes a zero-terminated string as an argument, and prints it to the console.
 
-The emulator exits cleanly when executing `jmp 0`. On exit, the emulator writes out several files:
-
 An IO port at `$401C` powers the REPL. The emulator reads from stdin line-by-line,
 and reads on `$401C` return the next byte from the input, blocking if there are none.
 Writes are immediately sent to stdout.
+
+The emulator exits cleanly when executing `jmp 0`. On exit, the emulator writes out several files:
 
 - `out.nes` - The resulting NES file. This is the contents of memory at $8000-$FFFF on exit.
   The 16 byte iNES header is added.
