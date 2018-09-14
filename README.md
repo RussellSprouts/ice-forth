@@ -78,8 +78,8 @@ Welcome to Forth!
 \ Assembler usage
 : oam-dma [
   hex
-  sprites >byte lda.#
-  4014          sta
+  sprites >byte LDA.#
+  4014          STA
   decimal
 ] ;
 ```
@@ -166,3 +166,28 @@ at `chere`. For example, a Forth definition for LDA would look like this:
 2. At compile time, compiles a call to `[asm]` (`RUN_ASM`), with inline
 parameters indicating the opcode and number of argument bytes for the
 instruction. `[asm]` will handle the runtime semantics of the instruction.
+
+### The `6502.lua` emulator
+
+A simple emulator written in Lua is included. It is a very basic emulator,
+probably has bugs even in basic operations, and not all instructions are
+supported. (e.g. BRK and interrupts are unsupported)
+
+To assist in debugging, these extra instructions are added:
+- `$FF` enters debug mode. In trace mode, each instruction is logged with info about the machine state.
+- `$EF` exits debug mode.
+- `$DF` Takes a zero-terminated string as an argument, and prints it to the console.
+
+The emulator exits cleanly when executing `jmp 0`. On exit, the emulator writes out several files:
+
+An IO port at `$401C` powers the REPL. The emulator reads from stdin line-by-line,
+and reads on `$401C` return the next byte from the input, blocking if there are none.
+Writes are immediately sent to stdout.
+
+- `out.nes` - The resulting NES file. This is the contents of memory at $8000-$FFFF on exit.
+  The 16 byte iNES header is added.
+- `ram.out` - The contents of RAM from $00-$7FF on exit, for debugging purposes
+- `ops.out` - A log of the memory writes and IO input that the emulator has processed since startup.
+  Using `visualize-ops.html`, you can see an animation of the Forth compiler working. It shows
+  a 256x256 grid representing each byte as a single square, as well as each character that is read
+  from the IO port.

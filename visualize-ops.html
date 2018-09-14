@@ -4,7 +4,7 @@
 <title>Operation Visualization</title>
 </head>
 <body style="background-color: #fdd">
-  <textarea style="float:left;width:20%;height:768px" id="text"></textarea>
+  <textarea style="float:left;width:20%;height:768px;" readonly id="text"></textarea>
   <canvas style="float:right" id="c" width=768 height=768></canvas>
   <hr style="clear:both"/>
   <label>Choose bootstrap.bin and ops.out
@@ -28,19 +28,20 @@
     }
   
     let op = 0;
-    let ops_per_frame = 1e6;
+    let ops_per_frame = 1024;
     let chars_per_frame = 16;
     let source = "";
+    let textarea = document.getElementById('text');
     function startAnimation() {
       let chars = 0;
-      for (let i = 0; i < ops_per_frame; i++) {
+      for (let i = 0; i < ops_per_frame && op < ops.length; i++) {
         let [opType, addr, val] = ops[op++].split('\t')
         if (opType == 'w') {
           setPixel(addr % 256, Math.floor(addr / 256), byte2Color(val % 256));
         } else if (opType == 'r') {
           chars++;
-          source = source + String.fromCharCode(+addr);
-          let textarea = document.getElementById('text');
+          const nextChar = String.fromCharCode(+addr);
+          source = source + nextChar;
           textarea.innerHTML = source;
           textarea.scrollTop = textarea.scrollHeight;
           if (chars === chars_per_frame) break;

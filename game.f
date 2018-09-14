@@ -8,6 +8,15 @@ hex
     colors 1+ 7 and to colors
 
     addr 1+ and 1FFF to addr
+    [
+      val-addr addr 1+ LDA
+      2006 STA
+      val-addr addr LDA
+      2006 STA
+      val-addr colors LDA
+      2007 STA
+    ]
+
 
     colors asl asl asl asl asl to vppu-mask
 ;
