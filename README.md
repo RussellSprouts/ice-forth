@@ -147,7 +147,7 @@ To save a bit more space, we make use of the fact that there are no
 legal 6502 instructions which end in the binary sequence `%11`. These are
 excluded from the table of instructions, giving 25% savings.
 
-The syntax of the assembler is based on the [https://docs.google.com/document/d/16Sv3Y-3rHPXyxT1J3zLBVq4reSPYtY2G6OSojNTm4SQ/edit#](Typist's Assembler Notation). To indicate the addressing mode
+The syntax of the assembler is based on the [Typist's Assembler Notation](https://docs.google.com/document/d/16Sv3Y-3rHPXyxT1J3zLBVq4reSPYtY2G6OSojNTm4SQ/edit#). To indicate the addressing mode
 of an instruction, a tail like `.ZX` is added, here indicating the ZeroPage,X
 addressing mode.
 
