@@ -156,7 +156,7 @@ immediate \ mark the word immediate as immediate
 : .s [
   BEGIN
     TXA
-    85 CMP.#
+    79 CMP.#
   WHILENE
     ] . [
   REPEAT

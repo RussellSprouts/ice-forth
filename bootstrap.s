@@ -836,8 +836,8 @@ AsmCompExec:
   
 defwordtmp "quit", 0, QUIT
   stx TMP1
-    cpx #Stack_End
-    bcs @underflow
+    cpx #Stack_End - Stack
+    bge @underflow
     ldx #$FF
     txs
   ldx TMP1
@@ -846,7 +846,7 @@ defwordtmp "quit", 0, QUIT
 @underflow:
   jsr DODOTQUOTE
   .asciiz "Stack underflow detected!"
-  ldx #Stack_End-1
+  ldx #Stack_End - Stack - 1
   jmp QUIT
 
 ; ( xt -- )
