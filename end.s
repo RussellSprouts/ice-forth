@@ -1,9 +1,13 @@
 
 .include "forth.inc"
 
-.segment "RAM"
+.segment "VARIABLES"
 .export VHERE_PERM_INIT
 VHERE_PERM_INIT:
+
+.segment "TMP_VARIABLES"
+.export VHERE_TMP_INIT
+VHERE_TMP_INIT:
 
 ; A marker for the end of the dictionary. This must be linked last.
 defword "E", F_END, DICT_END

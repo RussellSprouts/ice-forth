@@ -1,369 +1,379 @@
-\ Define addresses of the stack and tmp variables.
-: stack 8 ;
-: tmp 0 ;
-: io-port 16412 ;
 
-\ <tmp> definitions:
+<tmp> definitions:
 
-\ Macro to move the top of stack into tmp.
-: >TMP
-  stack    LDA.ZX
-  tmp      STA.Z
-  stack 1+ LDA.ZX
-  tmp 1+   STA.Z
-;
-
-\ special case these instructions
-: TXA 138 c, ;
-: TYA 152 c, ;
-: TXS 154 c, ;
-
-: and [
-  stack     LDA.ZX
-  stack 2 + AND.ZX
-  stack 2 + STA.ZX
-  
-  stack 1+  LDA.ZX
-  stack 3 + AND.ZX
-  stack 3 + STA.ZX
-  
-  INX INX
-] ;
-
-: or [
-  stack     LDA.ZX
-  stack 2 + ORA.ZX
-  stack 2 + STA.ZX
-
-  stack 1+  LDA.ZX
-  stack 3 + ORA.ZX
-  stack 3 + STA.ZX
-
-  INX INX
-] ;
-
-: xor [
-  stack     LDA.ZX
-  stack 2 + EOR.ZX
-  stack 2 + STA.ZX
-
-  stack 1+  LDA.ZX
-  stack 3 + EOR.ZX
-  stack 3 + STA.ZX
-
-  INX INX
-] ;
+  \ Define addresses of the stack and tmp variables.
+  : stack 8 ;
+  : tmp 0 ;
+  : io-port 16412 ;
 
 
+  \ Macro to move the top of stack into tmp.
+  : >TMP
+    stack    LDA.ZX
+    tmp      STA.Z
+    stack 1+ LDA.ZX
+    tmp 1+   STA.Z
+  ;
 
-\ Define the inline assembly language IF and THEN constructs.
-\ Rather than using labeled branches, we can do structured
-\ control flow. IFEQ, for example, will branch to the matching
-\ THEN if the Z flag is non-zero.
-: IF  chere @ ;
-: IFEQ  0 BNE IF ;
-: IFNE  0 BEQ IF ;
-: IFCC  0 BCS IF ;
-: IFCS  0 BCC IF ;
-: IFVC  0 BVS IF ;
-: IFVS  0 BVC IF ;
-: IFPL  0 BMI IF ;
-: IFMI  0 BPL IF ;
+  \ special case these instructions
+  : TXA 138 c, ;
+  : TYA 152 c, ;
+  : TXS 154 c, ;
 
-: THEN
-  dup
-  chere @ swap -
-  swap 1- c! 
-;
+<perm> definitions:
 
-: ELSE
-  CLV
-  IFVS
-  swap
-  THEN
-;
+  : and [
+    stack     LDA.ZX
+    stack 2 + AND.ZX
+    stack 2 + STA.ZX
+    
+    stack 1+  LDA.ZX
+    stack 3 + AND.ZX
+    stack 3 + STA.ZX
+    
+    INX INX
+  ] ;
 
-\ Define the assembly language looping constructs.
-\ A BEGIN..UNTIL loop will continue looping until
-\ the condition code given is set.
-: BEGIN  chere @ ;
-: UNTIL  chere @ - 2 - ;
-: UNTILEQ  UNTIL BNE ;
-: UNTILNE  UNTIL BEQ ;
-: UNTILCC  UNTIL BCS ;
-: UNTILCS  UNTIL BCC ;
-: UNTILVC  UNTIL BVS ;
-: UNTILVS  UNTIL BVC ;
-: UNTILPL  UNTIL BMI ;
-: UNTILMI  UNTIL BPL ;
+  : or [
+    stack     LDA.ZX
+    stack 2 + ORA.ZX
+    stack 2 + STA.ZX
 
-: WHILE  chere @ ;
-: WHILEEQ  0 BNE WHILE ;
-: WHILENE  0 BEQ WHILE ;
-: WHILECC  0 BCS WHILE ;
-: WHILECS  0 BCC WHILE ;
-: WHILEVC  0 BVS WHILE ;
-: WHILEVS  0 BVC WHILE ;
-: WHILEPL  0 BMI WHILE ;
-: WHILEMI  0 BPL WHILE ;
+    stack 1+  LDA.ZX
+    stack 3 + ORA.ZX
+    stack 3 + STA.ZX
 
-: REPEAT
-  CLV
-  swap chere @ - 2 - BVC \ bra to start of loop
-  dup
-  chere @ swap -
-  swap 1- c!
-;
+    INX INX
+  ] ;
 
-: flags  dhere @ dict::len + ;
+  : xor [
+    stack     LDA.ZX
+    stack 2 + EOR.ZX
+    stack 2 + STA.ZX
 
-: immediate  flags @ 128 xor flags ! ;
-immediate \ mark the word immediate as immediate
+    stack 1+  LDA.ZX
+    stack 3 + EOR.ZX
+    stack 3 + STA.ZX
 
-: always-inline immediate
-  flags @ 64 xor flags ! ;
+    INX INX
+  ] ;
 
-\ a b -- a b a
-: over [
-  DEX
-  DEX
-  stack 4 + LDA.ZX
-  stack     STA.ZX
-  stack 5 + LDA.ZX
-  stack 1 + STA.ZX  ] ;
+<tmp> definitions:
 
-\ ( a b c -- b c a )
-: rot [
-  stack     LDA.ZX
-  PHA
-  stack 2 + LDY.ZX
-  stack 4 + LDA.ZX
-  stack     STA.ZX
-  stack 4 + STY.ZX
-  PLA
-  stack 2 + STA.ZX
-  stack 1 + LDA.ZX
-  PHA
-  stack 3 + LDY.ZX
-  stack 5 + LDA.ZX
+  \ Define the inline assembly language IF and THEN constructs.
+  \ Rather than using labeled branches, we can do structured
+  \ control flow. IFEQ, for example, will branch to the matching
+  \ THEN if the Z flag is non-zero.
+  : IF  chere @ ;
+  : IFEQ  0 BNE IF ;
+  : IFNE  0 BEQ IF ;
+  : IFCC  0 BCS IF ;
+  : IFCS  0 BCC IF ;
+  : IFVC  0 BVS IF ;
+  : IFVS  0 BVC IF ;
+  : IFPL  0 BMI IF ;
+  : IFMI  0 BPL IF ;
 
-  stack 1 + STA.ZX
-  stack 5 + STY.ZX
-  PLA
-  stack 3 + STA.ZX
-] ;
+  : THEN
+    dup
+    chere @ swap -
+    swap 1- c! 
+  ;
 
-: .s [
-  BEGIN
-    TXA
-    79 CMP.#
-  WHILENE
-    ] . [
-  REPEAT
-] ;
+  : ELSE
+    CLV
+    IFVS
+    swap
+    THEN
+  ;
+
+  \ Define the assembly language looping constructs.
+  \ A BEGIN..UNTIL loop will continue looping until
+  \ the condition code given is set.
+  : BEGIN  chere @ ;
+  : UNTIL  chere @ - 2 - ;
+  : UNTILEQ  UNTIL BNE ;
+  : UNTILNE  UNTIL BEQ ;
+  : UNTILCC  UNTIL BCS ;
+  : UNTILCS  UNTIL BCC ;
+  : UNTILVC  UNTIL BVS ;
+  : UNTILVS  UNTIL BVC ;
+  : UNTILPL  UNTIL BMI ;
+  : UNTILMI  UNTIL BPL ;
+
+  : WHILE  chere @ ;
+  : WHILEEQ  0 BNE WHILE ;
+  : WHILENE  0 BEQ WHILE ;
+  : WHILECC  0 BCS WHILE ;
+  : WHILECS  0 BCC WHILE ;
+  : WHILEVC  0 BVS WHILE ;
+  : WHILEVS  0 BVC WHILE ;
+  : WHILEPL  0 BMI WHILE ;
+  : WHILEMI  0 BPL WHILE ;
+
+  : REPEAT
+    CLV
+    swap chere @ - 2 - BVC \ bra to start of loop
+    dup
+    chere @ swap -
+    swap 1- c!
+  ;
+
+  : flags  dhere @ dict::len + ;
+
+  : immediate  flags @ 128 xor flags ! ;
+  immediate \ mark the word immediate as immediate
+
+  : always-inline immediate
+    flags @ 64 xor flags ! ;
+
+  : .s [
+    BEGIN
+      TXA
+      79 CMP.#
+    WHILENE
+      ] . [
+    REPEAT
+  ] ;
  
-\ Executes the xt on the stack 
-: execute [
-  >TMP
-  tmp JMP.I
-] ;
+<perm> definitions:
 
-: = [
-  INX INX
-  stack 2 - LDA.ZX
-  stack     CMP.ZX
-  IFNE
-    0        LDA.#
+  \ a b -- a b a
+  : over [
+    DEX
+    DEX
+    stack 4 + LDA.ZX
+    stack     STA.ZX
+    stack 5 + LDA.ZX
+    stack 1 + STA.ZX  ] ;
+
+  \ ( a b c -- b c a )
+  : rot [
+    stack     LDA.ZX
+    PHA
+    stack 2 + LDY.ZX
+    stack 4 + LDA.ZX
+    stack     STA.ZX
+    stack 4 + STY.ZX
+    PLA
+    stack 2 + STA.ZX
+    stack 1 + LDA.ZX
+    PHA
+    stack 3 + LDY.ZX
+    stack 5 + LDA.ZX
+
+    stack 1 + STA.ZX
+    stack 5 + STY.ZX
+    PLA
+    stack 3 + STA.ZX
+  ] ;
+
+  \ Executes the xt on the stack 
+  : execute [
+    >TMP
+    tmp JMP.I
+  ] ;
+
+  : = [
+    INX INX
+    stack 2 - LDA.ZX
+    stack     CMP.ZX
+    IFNE
+      0        LDA.#
+      stack    STA.ZX
+      stack 1+ STA.ZX
+      RTS
+    THEN
+    0        LDY.#
+    stack 1- LDA.ZX
+    stack 1+ CMP.ZX
+    IFEQ
+      DEY
+    THEN
+    stack    STY.ZX
+    stack 1+ STY.ZX
+  ] ;
+
+  : <> [
+    INX INX
+    stack 2 - LDA.ZX
+    stack     CMP.ZX
+    IFNE
+     255      LDA.#
+     stack    STA.ZX
+     stack 1+ STA.ZX
+     RTS
+   THEN
+   0 LDY.#
+   stack 1- LDA.ZX
+   stack 1+ CMP.ZX
+   IFNE
+     DEY
+   THEN
+   stack    STY.ZX
+   stack 1+ STY.ZX
+   ] ;
+
+  : 0= [
+    0        LDY.#
+    stack    LDA.ZX
+    stack 1+ ORA.ZX
+    IFEQ
+      DEY
+    THEN
+    stack    STY.ZX
+    stack 1+ STY.ZX
+  ] ;
+
+  : 0> [
+    0        LDY.#
+    stack 1+ LDA.ZX
+    IFPL
+      DEY
+    THEN
+    stack    STY.ZX
+    stack 1+ STY.ZX
+  ] ;
+
+  \ Logical shift right
+  \ ( u -- u )
+  : lsr [
+    stack 1+ LSR.ZX
+    stack    ROR.ZX
+  ] ;
+
+  \ Arithmetic shift right
+  \ ( i -- i )
+  : asr [
+    stack 1+ LDA.ZX
+    128      CMP.#
+    stack 1+ ROR.ZX
+    stack    ROR.ZX
+  ] ;
+
+  \ Arithmetic shift left
+  : asl [
+    stack    ASL.ZX
+    stack 1+ ROL.ZX
+  ] ;
+
+  : >byte [
+    stack 1+ LDA.ZX
     stack    STA.ZX
+    0        LDA.#
     stack 1+ STA.ZX
-    RTS
-  THEN
-  0        LDY.#
-  stack 1- LDA.ZX
-  stack 1+ CMP.ZX
-  IFEQ
-    DEY
-  THEN
-  stack    STY.ZX
-  stack 1+ STY.ZX
-] ;
+  ] ;
 
-: <> [
-  INX INX
-  stack 2 - LDA.ZX
-  stack     CMP.ZX
-  IFNE
-   255      LDA.#
-   stack    STA.ZX
-   stack 1+ STA.ZX
-   RTS
- THEN
- 0 LDY.#
- stack 1- LDA.ZX
- stack 1+ CMP.ZX
- IFNE
-   DEY
- THEN
- stack    STY.ZX
- stack 1+ STY.ZX
- ] ;
+  : <byte always-inline [
+    0 LDA.#
+    stack 1+ STA.ZX
+  ] ;
 
-: 0= [
-  0        LDY.#
-  stack    LDA.ZX
-  stack 1+ ORA.ZX
-  IFEQ
-    DEY
-  THEN
-  stack    STY.ZX
-  stack 1+ STY.ZX
-] ;
+  : +! [
+    >TMP
 
-: 0> [
-  0        LDY.#
-  stack 1+ LDA.ZX
-  IFPL
-    DEY
-  THEN
-  stack    STY.ZX
-  stack 1+ STY.ZX
-] ;
+    0         LDY.#
+    tmp       LDA.IY
+    CLC
+    stack 2 + ADC.ZX
+    tmp       STA.IY
 
-\ Logical shift right
-\ ( u -- u )
-: lsr [
-  stack 1+ LSR.ZX
-  stack    ROR.ZX
-] ;
+    INY
+    tmp       LDA.IY
+    stack 3 + ADC.ZX
+    tmp       STA.IY
 
-\ Arithmetic shift right
-\ ( i -- i )
-: asr [
-  stack 1+ LDA.ZX
-  128      CMP.#
-  stack 1+ ROR.ZX
-  stack    ROR.ZX
-] ;
+    INX INX
+    INX INX
+  ] ;
 
-\ Arithmetic shift left
-: asl [
-  stack    ASL.ZX
-  stack 1+ ROL.ZX
-] ;
+  : -! [
+    >TMP
 
-: >byte [
-  stack 1+ LDA.ZX
-  stack    STA.ZX
-  0        LDA.#
-  stack 1+ STA.ZX
-] ;
+    0         LDY.#
+    tmp       LDA.IY
+    SEC
+    stack 2 + SBC.ZX
+    tmp       STA.IY
 
-: <byte always-inline [
-  0 LDA.#
-  stack 1+ STA.ZX
-] ;
+    INY
+    tmp       LDA.IY
+    stack 3 + SBC.ZX
+    tmp       STA.IY
 
-: +! [
-  >TMP
+    INX INX
+    INX INX
+  ] ;
 
-  0         LDY.#
-  tmp       LDA.IY
-  CLC
-  stack 2 + ADC.ZX
-  tmp       STA.IY
+<tmp> definitions:
 
-  INY
-  tmp       LDA.IY
-  stack 3 + ADC.ZX
-  tmp       STA.IY
+  : emit [
+    stack LDA.ZX
+    io-port STA \ $401C
+    INX
+    INX
+  ] ;
 
-  INX INX
-  INX INX
-] ;
+  : cr
+    10 emit ;
 
-: -! [
-  >TMP
+<perm> definitions:
 
-  0         LDY.#
-  tmp       LDA.IY
-  SEC
-  stack 2 + SBC.ZX
-  tmp       STA.IY
+  : c>r always-inline [
+    stack LDA.ZX
+    PHA
+    INX
+    INX
+  ] ;
 
-  INY
-  tmp       LDA.IY
-  stack 3 + SBC.ZX
-  tmp       STA.IY
+  : cr> always-inline [
+    DEX
+    DEX
+    PLA
+    stack    STA.ZX
+    0        LDA.#
+    stack 1+ STA.ZX
+  ] ;
 
-  INX INX
-  INX INX
-] ;
+  : >r always-inline [
+    stack 1+ LDA.ZX
+    PHA
+    stack    LDA.ZX
+    PHA
+    INX
+    INX
+  ] ;
 
-: emit [
-  stack LDA.ZX
-  io-port STA \ $401C
-  INX
-  INX
-] ;
+  : r> always-inline [
+    DEX
+    DEX
+    PLA
+    stack    STA.ZX
+    PLA
+    stack 1+ STA.ZX
+  ] ;
 
-: cr
-  10 emit ;
+  \ ( r: a -- )
+  : rdrop always-inline [
+    PLA
+    PLA
+  ] ;
 
-: c>r always-inline [
-  stack LDA.ZX
-  PHA
-  INX
-  INX
-] ;
+  \ ( -- sp )
+  : dsp@ [
+    DEX
+    DEX
+    TXA
+    stack    STA.ZX
+    0        LDY.#
+    stack 1+ STY.ZX
+  ] ;
 
-: cr> always-inline [
-  DEX
-  DEX
-  PLA
-  stack    STA.ZX
-  0        LDA.#
-  stack 1+ STA.ZX
-] ;
-
-: >r always-inline [
-  stack 1+ LDA.ZX
-  PHA
-  stack    LDA.ZX
-  PHA
-  INX
-  INX
-] ;
-
-: r> always-inline [
-  DEX
-  DEX
-  PLA
-  stack    STA.ZX
-  PLA
-  stack 1+ STA.ZX
-] ;
-
-\ ( r: a -- )
-: rdrop always-inline [
-  PLA
-  PLA
-] ;
-
-\ ( -- sp )
-: dsp@ [
-  DEX
-  DEX
-  TXA
-  stack    STA.ZX
-  0        LDY.#
-  stack 1+ STY.ZX
-] ;
-
-\ ( sp -- )
-: dsp! [
-  stack LDA.ZX
-  TAX
-] ;
+  \ ( sp -- )
+  : dsp! [
+    stack LDA.ZX
+    TAX
+  ] ;
 
 : ['] word find ;
 
@@ -583,6 +593,8 @@ decimal
   then
 ;
 
+( Prints all the words in the dictionary )
+( dict-start -- )
 : words'
   begin
     dup ?hidden not if
@@ -596,9 +608,13 @@ decimal
   cr
 ;
 
+( Prints all the words in all the dictionaries )
 : words
-  <perm> @ words' ( read latest entry )
-  <tmp> @ words'
+  dicts
+  begin
+    words'
+  dup 0= until
+  drop
 ;
 
 : compiling? state @ ;

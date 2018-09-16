@@ -99,6 +99,16 @@
    .asciiz str
 .endmacro
 
+; New dictionary format, unifying xt and dictionary entry.
+; jmp DUP_IMPL
+; .byte flags2
+; .word IMMEDIATE | HIDDEN | LEN
+; .byte "DUP"
+; 
+; The dictionary entry length does not change - once it is created
+; with a name, it is fixed. However, we can update the jmp CODE_IMPL
+; instruction to change the location of the code implementation, allowing
+; code to relocate.
 .macro defword_dict dict, dict_code, name, flags, label
   .segment dict
     label:
@@ -112,50 +122,44 @@
     .ident(.concat(.string(label), "_IMPL")):
 .endmacro
 
-; New dictionary format, unifying xt and dictionary entry.
-; jmp CODE_IMPL
-; .word LINK
-; .word IMMEDIATE | HIDDEN | LEN
-; .byte "DUP"
-; 
-; The dictionary entry length does not change - once it is created
-; with a name, it is fixed. However, we can update the jmp CODE_IMPL
-; instruction to move the code around.
 .macro defword name, flags, label
   defword_dict "DICT", "DICT_CODE", name, flags, label
 .endmacro
 
 .macro defwordtmp name, flags, label
-  defword_dict "TEMP_DICT", "TEMP_DICT_CODE", name, flags, label
+  defword_dict "TMP_DICT", "TMP_DICT_CODE", name, flags, label
 .endmacro
 
 ; Variables are a special kind of word which reserve
 ; two bytes of space in the VARIABLES segment, and when
 ; executed, push that address on the stack.
-.macro defvar name, init, label
+.macro defvar_dict vars, name, init, label
   defword name, 0, label
     push .ident(.concat(.string(label), "_VALUE"))
     rts
-  .segment "VARIABLES"
+  .segment vars
   .ident(.concat(.string(label), "_VALUE")):
   .word init
 .endmacro
 
-; The same as a variable, except it is allocated in the zero
-; page.
-.macro defvarzp name, init, label
-  defword name, 0, label
-    push .ident(.concat(.string(label), "_VALUE"))
-    rts
-  .segment "ZEROPAGE": zeropage
-  .ident(.concat(.string(label), "_VALUE")):
-  .word init
+.macro defvar name, init, label
+  defvar_dict "VARIABLES", name, init, label
+.endmacro
+
+.macro defvartmp name, init, label
+  defvar_dict "TMP_VARIABLES", name, init, label
 .endmacro
 
 ; A constant is a word which pushes its value onto the stack
 ; when it is executed.
 .macro defconst name, value, label
   defword name, 0, label
+    push value
+    rts
+.endmacro
+
+.macro defconsttmp name, value, label
+  defwordtmp name, 0, label
     push value
     rts
 .endmacro

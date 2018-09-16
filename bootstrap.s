@@ -52,9 +52,11 @@ F_END = $8000
 ; Reserve space to push the dictionary to the end of the memory
 ; space, since it now grows down.
 .res $CE7
+DHERE_PERM_INIT:
 
-.segment "TEMP_DICT"
-.res $6D3
+.segment "TMP_DICT"
+.res $6AB
+DHERE_TMP_INIT:
 
 .segment "ZEROPAGE": zeropage
 TMP1: .res 1
@@ -80,14 +82,11 @@ RStack: .res $100
 defwordtmp "first-test", 0, FIRST_TEST
   push 1234
   rts
-defconst "dict::impl", DictEntry::CodePtr, DictEntryCodePtr
-DHERE_PERM_INIT := DictEntryCodePtr
-DHERE_TMP_INIT := FIRST_TEST
 
-defconst "dict::len", DictEntry::Len, DictEntryLen
-defconst "dict::flags", DictEntry::Flags2, DictEntryFlags
-defconst "dict::name", DictEntry::Name, DictEntryName
-
+defconsttmp "dict::impl", DictEntry::CodePtr, DictEntryCodePtr
+defconsttmp "dict::len", DictEntry::Len, DictEntryLen
+defconsttmp "dict::flags", DictEntry::Flags2, DictEntryFlags
+defconsttmp "dict::name", DictEntry::Name, DictEntryName
 defconst "c-sp", ControlFlowSP, C_SP
 defconst "cstack", ControlFlowStack, CSTACK
 
@@ -98,9 +97,9 @@ defword "drop", F_INLINE, DROP
 
 ; ( a b -- b a )
 defword "swap", 0, SWAP
-  lda Stack, x
+  lda Stack+0, x
   ldy Stack+2, x
-  sty Stack, x
+  sty Stack+0, x
   sta Stack+2, x
   lda Stack+1, x
   ldy Stack+3, x
@@ -113,7 +112,7 @@ defword "dup", 0, DUP
   dex
   dex
   lda Stack+2, x
-  sta Stack, x
+  sta Stack+0, x
   lda Stack+3, x
   sta Stack+1, x
   rts
@@ -179,10 +178,6 @@ defword "-", 0, SUB
   sta Stack+3, x
   pop
   rts
-
-DEX_OP = $CA
-LDA_IMM_OP = $A9
-STA_ZP_X_OP = $95
 
 defword "!", 0, STORE
   toTMP1
@@ -280,7 +275,7 @@ defwordtmp "word", 0, WORD
 .segment "VARIABLES"
   word_buffer: .res 32
 
-defvar "base", 10, BASE
+defvartmp "base", 10, BASE
 
 ; ( str len -- parsed-number )
 ; or ( str len -- str len 0 ) on error
@@ -553,7 +548,7 @@ defwordtmp "rfind", 0, RFIND
   rts
 
 defconst "<perm>", HERE_PERM, PERM_LATEST
-defconst "<tmp>", DHERE_TMP, TMP_LATEST
+defconst "<tmp>", HERE_TMP, TMP_LATEST
 
 defwordtmp "definitions:", 0, DEFINITIONS
   jsr HERE
@@ -563,13 +558,14 @@ defwordtmp "definitions:", 0, DEFINITIONS
 defword "dicts", 0, DICTS
   push 0
   push DHERE_TMP
+  jsr FETCH
   push DHERE_PERM
-  rts
+  jmp FETCH
 
 ; Points to a list of 3 RAM addresses, holding
 ; the current HERE pointers, representing where
 ; to place the next code, dictionary, or variable bytes.
-defvar "here", HERE_PERM, HERE
+defvartmp "here", HERE_PERM, HERE
 
 ; Gives the address of the next free byte of code
 defwordtmp "chere", 0, CHERE
@@ -590,11 +586,11 @@ defwordtmp "vhere", 0, VHERE
   push 4
   jmp ADD
 
-.segment "TEMP_CODE"
+.segment "TMP_VARIABLES"
 HERE_TMP:
   CHERE_TMP: .word CHERE_TMP_INIT
   DHERE_TMP: .word DHERE_TMP_INIT
-  VHERE_TMP: .word 0 ; VHERE_TMP_INIT
+  VHERE_TMP: .word VHERE_TMP_INIT
 
 HERE_PERM:
   CHERE_PERM: .word CHERE_PERM_INIT
@@ -707,7 +703,7 @@ defwordtmp "c,", 0, CCOMMA
   jsr CHERE
   jmp STORE
 
-defvar "state", 0, STATE
+defvartmp "state", 0, STATE
 
 defwordtmp "[", F_IMMED, LSQUARE
   lda #0
@@ -870,6 +866,10 @@ INLINE:
   pop ; drop the two stack values
   pop
   rts
+
+DEX_OP = $CA
+LDA_IMM_OP = $A9
+STA_ZP_X_OP = $95
 
 defwordtmp "interpret", 0, INTERPRET
   jsr WORD
