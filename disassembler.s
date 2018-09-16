@@ -3,7 +3,7 @@
 ; It's a very basic one-pass disassembler.
 ; -----------------------------------------------
 
-.segment "CODE"
+.segment "TEMP_CODE"
 
 .macpack generic
 .import IO_PORT, DUP, FETCH, CFETCH, INCR, SWAP, DOT, DODOTQUOTE, RFIND

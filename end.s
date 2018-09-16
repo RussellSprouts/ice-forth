@@ -1,17 +1,21 @@
 
 .include "forth.inc"
 
-.export VHERE, VHERE_VALUE
-; Variable which points to the next free variable RAM space.
-defvar "vhere", VHERE_VALUE+2, VHERE
+.segment "RAM"
+.export VHERE_PERM_INIT
+VHERE_PERM_INIT:
 
 ; A marker for the end of the dictionary. This must be linked last.
-.export DICT_END
 defword "E", F_END, DICT_END
   rts
 
 .segment "DICT_CODE"
-.export CHERE_INIT
-CHERE_INIT:
+.export CHERE_PERM_INIT
+CHERE_PERM_INIT:
 
+defwordtmp "E", F_END, TMP_DICT_END
+  rts
 
+.segment "TMP_DICT_CODE"
+.export CHERE_TMP_INIT
+CHERE_TMP_INIT:

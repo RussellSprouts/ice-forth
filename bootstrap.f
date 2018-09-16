@@ -1,8 +1,9 @@
-
 \ Define addresses of the stack and tmp variables.
 : stack 8 ;
 : tmp 0 ;
 : io-port 16412 ;
+
+\ <tmp> definitions:
 
 \ Macro to move the top of stack into tmp.
 : >TMP
@@ -16,6 +17,44 @@
 : TXA 138 c, ;
 : TYA 152 c, ;
 : TXS 154 c, ;
+
+: and [
+  stack     LDA.ZX
+  stack 2 + AND.ZX
+  stack 2 + STA.ZX
+  
+  stack 1+  LDA.ZX
+  stack 3 + AND.ZX
+  stack 3 + STA.ZX
+  
+  INX INX
+] ;
+
+: or [
+  stack     LDA.ZX
+  stack 2 + ORA.ZX
+  stack 2 + STA.ZX
+
+  stack 1+  LDA.ZX
+  stack 3 + ORA.ZX
+  stack 3 + STA.ZX
+
+  INX INX
+] ;
+
+: xor [
+  stack     LDA.ZX
+  stack 2 + EOR.ZX
+  stack 2 + STA.ZX
+
+  stack 1+  LDA.ZX
+  stack 3 + EOR.ZX
+  stack 3 + STA.ZX
+
+  INX INX
+] ;
+
+
 
 \ Define the inline assembly language IF and THEN constructs.
 \ Rather than using labeled branches, we can do structured
@@ -76,21 +115,13 @@
   swap 1- c!
 ;
 
-: immediate [
-  dict::len LDY.#
-  128       LDA.#
-  latest    EOR.IY
-  latest    STA.IY
-] ;
+: flags  dhere @ dict::len + ;
+
+: immediate  flags @ 128 xor flags ! ;
 immediate \ mark the word immediate as immediate
 
-: always-inline immediate [
-  dict::len LDY.#
-  64        LDA.#
-  latest    EOR.IY
-  latest    STA.IY
-] ;
-
+: always-inline immediate
+  flags @ 64 xor flags ! ;
 
 \ a b -- a b a
 : over [
@@ -125,7 +156,7 @@ immediate \ mark the word immediate as immediate
 : .s [
   BEGIN
     TXA
-    39 CMP.#
+    85 CMP.#
   WHILENE
     ] . [
   REPEAT
@@ -196,42 +227,6 @@ immediate \ mark the word immediate as immediate
   THEN
   stack    STY.ZX
   stack 1+ STY.ZX
-] ;
-
-: and [
-  stack     LDA.ZX
-  stack 2 + AND.ZX
-  stack 2 + STA.ZX
-  
-  stack 1+  LDA.ZX
-  stack 3 + AND.ZX
-  stack 3 + STA.ZX
-  
-  INX INX
-] ;
-
-: or [
-  stack     LDA.ZX
-  stack 2 + ORA.ZX
-  stack 2 + STA.ZX
-
-  stack 1+  LDA.ZX
-  stack 3 + ORA.ZX
-  stack 3 + STA.ZX
-
-  INX INX
-] ;
-
-: xor [
-  stack     LDA.ZX
-  stack 2 + EOR.ZX
-  stack 2 + STA.ZX
-
-  stack 1+  LDA.ZX
-  stack 3 + EOR.ZX
-  stack 3 + STA.ZX
-
-  INX INX
 ] ;
 
 \ Logical shift right
@@ -391,12 +386,12 @@ immediate \ mark the word immediate as immediate
 
 \ Recursively call the current word
 : recurse immediate
-  latest @
+  dhere @
   jsr,
 ;
 
 : recurse-tail immediate
-  latest @
+  dhere @
   jmp,
 ;
 
@@ -497,7 +492,6 @@ decimal
 : ')' [ char ) ] literal ;
 : '"' [ char " ] literal ;
 
-
 : ( immediate
   1
   begin
@@ -589,8 +583,7 @@ decimal
   then
 ;
 
-: words
-  latest @ ( read latest entry )
+: words'
   begin
     dup ?hidden not if
       dup id.
@@ -601,6 +594,11 @@ decimal
   until
   drop ( drop null pointer )
   cr
+;
+
+: words
+  <perm> @ words' ( read latest entry )
+  <tmp> @ words'
 ;
 
 : compiling? state @ ;
@@ -723,7 +721,7 @@ hex
 ( Ends an interrupt handler definiton )
 : ;int immediate
   40 c, \ append rti
-  latest @ hidden \ unhide
+  dhere @ hidden \ unhide
   [compile] [
 ;
 decimal
@@ -873,3 +871,7 @@ hex
     2002 BIT
   UNTILMI
 ] ;
+
+['] nmi set-nmi!
+
+

@@ -19,17 +19,17 @@ hex
     colors asl asl asl asl asl to vppu-mask
 ;
 
-['] nmi set-nmi!
-
-: init
-  [ 80 LDA.#
-    2000 STA ]
-;
+: init ;
 
 : done
-  freeze
+  freeze \ stop emulation and write NES ROM
   wait-for-ppu
   init
+  \ Enable NMIs
+  [ 80 LDA.#
+    2000 STA ]
+
+  \ Loop forever and call the frame function each frame
   begin
     ppu-wait-nmi
     frame
@@ -64,6 +64,8 @@ hex
   drop
 ;
 
-['] print9 co-start .
-['] print8 co-start .
-500 ['] printany co-start >co
+\ ['] print9 co-start .
+\ ['] print8 co-start .
+\ 500 ['] printany co-start >co
+
+\ 400 printany

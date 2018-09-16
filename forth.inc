@@ -48,6 +48,20 @@
   sta TMP2
 .endmacro
 
+.macro toTMP3
+  lda Stack, x
+  sta TMP3
+  lda Stack+1, x
+  sta TMP4
+.endmacro
+
+.macro toTMP5
+  lda Stack, x
+  sta TMP5
+  lda Stack+1, x
+  sta TMP6
+.endmacro
+
 .macro fromTMP1
   lda TMP1
   sta Stack, x
@@ -85,6 +99,19 @@
    .asciiz str
 .endmacro
 
+.macro defword_dict dict, dict_code, name, flags, label
+  .segment dict
+    label:
+    .export label
+    jmp .ident(.concat(.string(label), "_IMPL"))
+    ; length and name
+    .byte >flags
+    .byte .strlen(name) | <flags
+    .byte name
+  .segment dict_code
+    .ident(.concat(.string(label), "_IMPL")):
+.endmacro
+
 ; New dictionary format, unifying xt and dictionary entry.
 ; jmp CODE_IMPL
 ; .word LINK
@@ -95,16 +122,11 @@
 ; with a name, it is fixed. However, we can update the jmp CODE_IMPL
 ; instruction to move the code around.
 .macro defword name, flags, label
-  .segment "DICT"
-    label:
-    .export label
-    jmp .ident(.concat(.string(label), "_IMPL"))
-    ; length and name
-    .byte >flags
-    .byte .strlen(name) | <flags
-    .byte name
-  .segment "DICT_CODE"
-    .ident(.concat(.string(label), "_IMPL")):
+  defword_dict "DICT", "DICT_CODE", name, flags, label
+.endmacro
+
+.macro defwordtmp name, flags, label
+  defword_dict "TEMP_DICT", "TEMP_DICT_CODE", name, flags, label
 .endmacro
 
 ; Variables are a special kind of word which reserve

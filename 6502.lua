@@ -556,7 +556,16 @@ function emulate()
       return
     else
       if trace then
-        print(string.format("IP:\t%04x\t%02x\t%s\ta:%02x\tx:%02x\ty:%02x\tv:%01x", m.ip, opcode, opcodes[opcode][1], m.a, m.x, m.y, m.status.v))
+        print(
+          string.format("%sIP:\t%04x\t%02x\t%s\ta:%02x\tx:%02x\ty:%02x\tv:%01x",
+            (' '):rep(math.floor((0xFF - m.sp)/2)),
+            m.ip,
+            opcode,
+            opcodes[opcode][1],
+            m.a,
+            m.x,
+            m.y,
+            m.status.v))
       end
       --printStack()
       opcodes[opcode][2]()

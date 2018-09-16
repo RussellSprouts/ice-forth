@@ -46,6 +46,7 @@ CFSInit:
 
 ; Yields the current coroutine execution
 ; and resumes the next one.
+; If there are no other routines to resume, it's a no-op.
 defword "yield", 0, YIELD
 
   ; Save current register values

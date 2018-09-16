@@ -29,8 +29,8 @@
 .include "forth.inc"
 
 .import DICT_END
-.import CHERE_INIT
-.import VHERE, VHERE_VALUE
+.import CHERE_PERM_INIT, CHERE_TMP_INIT
+.import VHERE_PERM_INIT, VHERE_TMP_INIT
 
 ; The simulator uses this address as the IO port.
 ; A write to this address will output that character
@@ -51,7 +51,10 @@ F_END = $8000
 .segment "DICT"
 ; Reserve space to push the dictionary to the end of the memory
 ; space, since it now grows down.
-.res $C8D
+.res $CE7
+
+.segment "TEMP_DICT"
+.res $6D3
 
 .segment "ZEROPAGE": zeropage
 TMP1: .res 1
@@ -70,11 +73,17 @@ ControlFlowSP: .res 1
 ControlFlowStack: .res 32
 ControlFlowStackEnd:
 
-.segment "RAM"
+.segment "STACK"
 ; Reserve the hardware stack.
 RStack: .res $100
 
+defwordtmp "first-test", 0, FIRST_TEST
+  push 1234
+  rts
 defconst "dict::impl", DictEntry::CodePtr, DictEntryCodePtr
+DHERE_PERM_INIT := DictEntryCodePtr
+DHERE_TMP_INIT := FIRST_TEST
+
 defconst "dict::len", DictEntry::Len, DictEntryLen
 defconst "dict::flags", DictEntry::Flags2, DictEntryFlags
 defconst "dict::name", DictEntry::Name, DictEntryName
@@ -215,7 +224,7 @@ defword "c@", 0, CFETCH
 ; ( ptr1 ptr2 n -- )
 defword "cmove", 0, CMOVE
 
-defword "key", 0, KEY
+defwordtmp "key", 0, KEY
   dex
   dex
   lda IO_PORT
@@ -225,7 +234,7 @@ defword "key", 0, KEY
   rts
 
 ; ( -- str-ptr len )
-defword "word", 0, WORD
+defwordtmp "word", 0, WORD
   lda #0
   sta TMP1
   jsr KEY
@@ -276,7 +285,7 @@ defvar "base", 10, BASE
 ; ( str len -- parsed-number )
 ; or ( str len -- str len 0 ) on error
 ; Also, carry is set if there's an error.
-defword "number", 0, NUMBER
+defwordtmp "number", 0, NUMBER
 
   Str := TMP1
   Result := TMP3
@@ -362,12 +371,10 @@ defword "number", 0, NUMBER
   sec ; signal the error
   rts
 
-defvarzp "latest", DictEntryCodePtr, LATEST
-
 ; ( str-ptr len dict-start -- dictionary-pointer )
 ; or ( str-ptr len dict-start -- str-ptr len 0 ) if it wasn't found
 ; Searches the dictionary at the given start for the given word.
-defword "dfind", 0, DFIND
+defwordtmp "dfind", 0, DFIND
   LPointer := TMP1
   MyStr := TMP3
 
@@ -458,26 +465,33 @@ defword "dfind", 0, DFIND
 ; ( str-ptr len -- dictionary-pointer )
 ; or ( str-ptr len -- str-ptr len 0 ) if it wasn't found
 ; Searches the dictionary for a definition of the given word.
-defword "find", 0, FIND
-
-  dex
-  dex
-  lda LATEST_VALUE
-  sta Stack, x
-  lda LATEST_VALUE+1
-  sta Stack+1, x
-  jmp DFIND
+defwordtmp "find", 0, FIND
+  
+  push DHERE_PERM
+  jsr FETCH
+  jsr DFIND
+  lda Stack, x
+  ora Stack+1, x
+  beq :+
+  rts
+: pop
+  push DHERE_TMP
+  jsr FETCH
+  jsr DFIND
+  rts
 
 ; Given a pointer, gets the name of the dictionary entry,
 ; or an empty string if it's not in the dictionary.
 ; ( addr -- addr len )
-defword "rfind", 0, RFIND
+defwordtmp "rfind", 0, RFIND
   @LPointer := TMP1
 
-  lda LATEST_VALUE
+  jsr DHERE
+  lda Stack, x
   sta @LPointer
-  lda LATEST_VALUE+1
+  lda Stack+1, x
   sta @LPointer+1
+  pop
 
 @loop:
   lda @LPointer
@@ -538,21 +552,60 @@ defword "rfind", 0, RFIND
   sta Stack+1, x
   rts
 
-; Code Here pointer
-; Points to the next free byte in the code area.
-defvarzp "chere", CHERE_INIT, CHERE
+defconst "<perm>", HERE_PERM, PERM_LATEST
+defconst "<tmp>", DHERE_TMP, TMP_LATEST
 
-; Dictionary Here pointer
-; The dictionary grows downward, so this points to the
-; first used byte in dictionary memory.
-; This must be initialized to the first dict entry.
-defvarzp "dhere", DictEntryCodePtr, DHERE
+defwordtmp "definitions:", 0, DEFINITIONS
+  jsr HERE
+  jsr STORE
+  rts
+
+defword "dicts", 0, DICTS
+  push 0
+  push DHERE_TMP
+  push DHERE_PERM
+  rts
+
+; Points to a list of 3 RAM addresses, holding
+; the current HERE pointers, representing where
+; to place the next code, dictionary, or variable bytes.
+defvar "here", HERE_PERM, HERE
+
+; Gives the address of the next free byte of code
+defwordtmp "chere", 0, CHERE
+  jsr HERE
+  jmp FETCH
+
+; Gives the address of the next byte to add to the dictionary
+defwordtmp "dhere", 0, DHERE
+  jsr HERE
+  jsr FETCH
+  push 2
+  jmp ADD
+
+; Gives the address of the next free byte of RAM
+defwordtmp "vhere", 0, VHERE
+  jsr HERE
+  jsr FETCH
+  push 4
+  jmp ADD
+
+.segment "TEMP_CODE"
+HERE_TMP:
+  CHERE_TMP: .word CHERE_TMP_INIT
+  DHERE_TMP: .word DHERE_TMP_INIT
+  VHERE_TMP: .word 0 ; VHERE_TMP_INIT
+
+HERE_PERM:
+  CHERE_PERM: .word CHERE_PERM_INIT
+  DHERE_PERM: .word DHERE_PERM_INIT
+  VHERE_PERM: .word VHERE_PERM_INIT
 
 JMP_OP = $4C
 
 ; ( str-ptr len -- )
 ; Creates a new dictionary entry
-defword "create", 0, CREATE
+defwordtmp "create", 0, CREATE
   ; The dict entry needs str-len + DictEntry::Name bytes of space.
   ; Subtract from DHERE to allocate the space.
   jsr DUP ; str length
@@ -565,22 +618,11 @@ defword "create", 0, CREATE
   jsr DHERE
   jsr STORE
 
-  ; Set the new entry's previous pointer
-  ; LATEST @ DHERE @ PreviousPtr + !
-  ; jsr LATEST
-  ; jsr FETCH
-  ; jsr DHERE
-  ; jsr FETCH
-  ; push DictEntry::PreviousPtr
-  ; jsr ADD
-  ; jsr STORE
-
   ; Update LATEST to the new entry
-  ; DHERE @ LATEST !
-  jsr DHERE
-  jsr FETCH
-  jsr LATEST
-  jsr STORE
+  ;jsr DHERE
+  ;jsr FETCH
+  ;jsr LATEST
+  ;jsr STORE
 
   ; ( stack is now string-ptr len )
   ; Store length in new entry
@@ -609,14 +651,18 @@ defword "create", 0, CREATE
   jsr ADD
   jsr STORE  
   
-  ; Move DHERE past the Len byte and pointers
+  ; Get DHERE value
+  jsr DHERE
+  jsr FETCH
+  ; Add the offset to the name part
   clc
   lda #<(DictEntry::Name)
-  adc DHERE_VALUE
+  adc Stack, x
   sta TMP3
   lda #>(DictEntry::Name)
-  adc DHERE_VALUE+1
+  adc Stack+1, x
   sta TMP4
+  pop ; Drop DHERE value
 
   ; now we need to copy the name string.
   lda Stack, x ; get length
@@ -638,73 +684,66 @@ defword "create", 0, CREATE
   pop
   rts
 
-defword ",", 0, COMMA
-  ldy #0
-  lda Stack, x
-  sta (CHERE_VALUE), y
-  lda Stack+1, x
-  iny
-  sta (CHERE_VALUE), y
+defwordtmp ",", 0, COMMA
+  jsr CHERE
+  jsr FETCH
+  jsr STORE
 
-  clc
-  lda CHERE_VALUE
-  adc #<2
-  sta CHERE_VALUE
-  lda CHERE_VALUE+1
-  adc #>2
-  sta CHERE_VALUE+1
-  pop
-  rts
+  jsr CHERE
+  jsr FETCH
+  jsr INCR
+  jsr INCR
+  jsr CHERE
+  jmp STORE
 
-defword "c,", 0, CCOMMA
-  lda Stack, x
-  ldy #0
-  sta (CHERE_VALUE), y
-  
-  inc CHERE_VALUE
-  bne @done
-  inc CHERE_VALUE+1
-@done:
-  pop
-  rts
+defwordtmp "c,", 0, CCOMMA
+  jsr CHERE
+  jsr FETCH
+  jsr CSTORE
+
+  jsr CHERE
+  jsr FETCH
+  jsr INCR
+  jsr CHERE
+  jmp STORE
 
 defvar "state", 0, STATE
 
-defword "[", F_IMMED, LSQUARE
+defwordtmp "[", F_IMMED, LSQUARE
   lda #0
   sta STATE_VALUE
   sta STATE_VALUE+1
   rts
 
-defword "]", 0, RSQUARE
+defwordtmp "]", 0, RSQUARE
   lda #1
   sta STATE_VALUE
   lda #0
   sta STATE_VALUE+1
   rts
 
-defword ":", 0, COLON
+defwordtmp ":", 0, COLON
   jsr WORD
   jsr CREATE ; create the dictionary entry
-  jsr LATEST
+  jsr DHERE
   jsr FETCH
   jsr HIDDEN ; toggle hidden in the entry
   jmp RSQUARE ; enter compile mode
 
 RTS_OP = $60
 
-defword ";", F_IMMED, SEMICOLON
+defwordtmp ";", F_IMMED, SEMICOLON
   push RTS_OP
   jsr CCOMMA ; append rts to code
 
-  jsr LATEST
+  jsr DHERE
   jsr FETCH
   jsr HIDDEN ; toggle hidden flag
   jmp LSQUARE ; go back to immediate mode
 
 ; ( dict-ptr -- )
 ; Marks the dictionary entry as hidden
-defword "hidden", 0, HIDDEN
+defwordtmp "hidden", 0, HIDDEN
   toTMP1
 
   ldy #(DictEntry::Len)
@@ -715,7 +754,7 @@ defword "hidden", 0, HIDDEN
   pop
   rts
 
-defword "hide", 0, HIDE
+defwordtmp "hide", 0, HIDE
   jsr WORD
   jsr FIND
   jmp HIDDEN
@@ -726,7 +765,7 @@ BVC_OP = $50
 BEQ_OP = $F0
 JSR_OP = $20
 
-defword "[asm]", 0, RUN_ASM
+defwordtmp "[asm]", 0, RUN_ASM
   pla
   sta TMP1
   pla
@@ -768,7 +807,7 @@ defword "[asm]", 0, RUN_ASM
 ; of bytes in the instruction, and the instruction
 ; number, compiles the instruction and arg to
 ; the code space.
-defword "asm-comp", 0, ASM_COMP
+defwordtmp "asm-comp", 0, ASM_COMP
   lda STATE_VALUE
   beq AsmCompExec
 @compile:
@@ -795,7 +834,7 @@ AsmCompExec:
 @one:
   rts
   
-defword "quit", 0, QUIT
+defwordtmp "quit", 0, QUIT
   stx TMP1
     cpx #Stack_End
     bcs @underflow
@@ -810,7 +849,29 @@ defword "quit", 0, QUIT
   ldx #Stack_End-1
   jmp QUIT
 
-defword "interpret", 0, INTERPRET
+; ( xt -- )
+; Inlines the code of the execution token,
+; stopping when it reaches an RTS instruction.
+INLINE:
+  push DictEntry::CodePtr
+  jsr ADD
+  jsr FETCH
+@loop2:
+  jsr DUP
+  jsr CFETCH
+  lda Stack, x
+  cmp #$60
+  beq @doneInlining2
+  jsr CCOMMA
+  jsr INCR
+  clv
+  bvc @loop2
+@doneInlining2:
+  pop ; drop the two stack values
+  pop
+  rts
+
+defwordtmp "interpret", 0, INTERPRET
   jsr WORD
   jsr FIND
   lda Stack, x
@@ -832,36 +893,10 @@ defword "interpret", 0, INTERPRET
   bne @inline
   push JSR_OP
   jsr CCOMMA
-  
-  fromTMP1
-  jsr COMMA
-  rts
+  jmp COMMA
 
 @inline: ; simple inlining -- just copy until you see an rts.
-  ; dict::code + @
-  push DictEntry::CodePtr
-  jsr ADD
-  jsr FETCH
-  toTMP1
-  pop
-  ldy #0
-@loop:
-  lda (TMP1), y
-  cmp #$60 ; if it's an RTS instruction
-  beq @return
-  dex
-  dex
-  sta Stack, x
-  lda #0
-  sta Stack+1, x
-  tya
-  pha
-  jsr CCOMMA ; write the next byte
-  pla
-  tay
-  iny
-  bne @loop ; bra 
-  rts
+  jmp INLINE
 
 @execute:
   pop ; drop dictionary pointer
@@ -959,7 +994,7 @@ defword "interpret", 0, INTERPRET
 @errorMessage:
   .byte $A, "ERROR: Couldn't find word: ", 0
 
-defword ".", 0, DOT
+defwordtmp ".", 0, DOT
   ; Set the V flag. While v is set, we will skip
   ; leading 0s. Once we see a digit which is non-zero, clv.
   bit @setV
@@ -1011,7 +1046,7 @@ HexDigits: .byte "0123456789ABCDEF"
 ; Use like:
 ;   jsr DODOTQUOTE
 ;   .asciiz "Some string"
-defword "(.')", 0, DODOTQUOTE
+defwordtmp "(.')", 0, DODOTQUOTE
   pla
   sta TMP1
   pla
@@ -1043,11 +1078,11 @@ defword "c@1+", 0, FETCH_INC
   jsr SWAP
   jmp CFETCH 
 
-defword "see", 0, SEE
+defwordtmp "see", 0, SEE
   .import Instruction
   jmp Instruction
 
-defword "ins", 0, INS
+defwordtmp "ins", 0, INS
   jsr WORD
   pop ; drop string length
   toTMP1
@@ -1176,7 +1211,7 @@ YSave:
   ldy #0
   rti
 
-defword "freeze", 0, FREEZE
+defwordtmp "freeze", 0, FREEZE
   @source := TMP1
   @target := TMP3
 
@@ -1198,10 +1233,10 @@ defword "freeze", 0, FREEZE
   sta @source+1
 
   ; Set target pointer, and source pointer of decompress
-  lda CHERE_VALUE
+  lda CHERE_PERM
   sta SourcePtrLo+1
   sta @target
-  lda CHERE_VALUE+1
+  lda CHERE_PERM+1
   sta SourcePtrHi+1
   sta @target+1
 
