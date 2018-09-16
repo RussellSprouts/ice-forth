@@ -272,7 +272,7 @@ defwordtmp "word", 0, WORD
   bne @skipComment
   beq WORD_IMPL ; bra
 
-.segment "VARIABLES"
+.segment "TMP_VARIABLES"
   word_buffer: .res 32
 
 defvartmp "base", 10, BASE
