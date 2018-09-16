@@ -1,3 +1,5 @@
+<perm> definitions:
+
 hex
 
 0 val colors
@@ -24,6 +26,9 @@ hex
 : done
   freeze \ stop emulation and write NES ROM
   wait-for-ppu
+  \ Disable rendering
+  [ 0 LDA.#
+    2000 STA ]
   init
   \ Enable NMIs
   [ 80 LDA.#
@@ -64,8 +69,8 @@ hex
   drop
 ;
 
-\ ['] print9 co-start .
-\ ['] print8 co-start .
-\ 500 ['] printany co-start >co
+\ ' print9 co-start .
+\ ' print8 co-start .
+\ 500 ' printany co-start >co
 
 \ 400 printany

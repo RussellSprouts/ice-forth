@@ -30,8 +30,6 @@
   : cr
     10 emit ;
 
-  : ['] word find ;
-
 <perm> definitions:
 
   : and [
@@ -181,6 +179,41 @@
       ] . [
     REPEAT
   ] ;
+
+<perm> definitions:
+
+  : >byte [
+    stack 1+ LDA.ZX
+    stack    STA.ZX
+    0        LDA.#
+    stack 1+ STA.ZX
+  ] ;
+
+  : <byte always-inline [
+    0 LDA.#
+    stack 1+ STA.ZX
+  ] ;
+
+<tmp> definitions:
+
+  \ Pronounces tick, finds the given word
+  : ' word find ;
+
+  \ Takes the next word and compiles it even if it's immediate
+  : [compile] immediate
+    ' JSR
+  ;
+
+  : literal immediate
+    DEX DEX
+    dup
+    <byte LDA.#
+    stack STA.ZX
+    >byte LDA.#
+    stack 1+ STA.ZX
+  ;
+
+  : ['] immediate ' [compile] literal ;
  
 <perm> definitions:
 
@@ -271,18 +304,6 @@
   : asl [
     stack    ASL.ZX
     stack 1+ ROL.ZX
-  ] ;
-
-  : >byte [
-    stack 1+ LDA.ZX
-    stack    STA.ZX
-    0        LDA.#
-    stack 1+ STA.ZX
-  ] ;
-
-  : <byte always-inline [
-    0 LDA.#
-    stack 1+ STA.ZX
   ] ;
 
   : +! [
@@ -395,13 +416,6 @@
     JMP
   ;
 
-  \ Takes the next word and compiles it even if it's immediate
-  : [compile] immediate
-    word
-    find
-    JSR
-  ;
-  
   : POP INX INX ;
 
 <perm> definitions:
@@ -485,15 +499,6 @@
       0        LDA.#
       stack 1+ STA.ZX
     ]
-  ;
-
-  : literal immediate
-    DEX DEX
-    dup
-    <byte LDA.#
-    stack STA.ZX
-    >byte LDA.#
-    stack 1+ STA.ZX
   ;
 
   : '(' [ char ( ] literal ;
@@ -614,7 +619,7 @@
   ( -- )
   : ." immediate
     compiling? if
-      [ ['] (.') ] literal JSR ( compile jsr (.") )
+      ['] (.') JSR ( compile jsr (.") )
 
       begin
         key
@@ -657,7 +662,7 @@
     ( initialize val )
     !
 
-    [ ['] always-inline literal ] execute drop
+    ['] always-inline execute drop
   ;
 
   : c-val
@@ -724,7 +729,7 @@
   : set-irq! 0FFFE ! ;
 
 
-  ['] thaw set-reset!
+  ' thaw set-reset!
 
   ( Ends an interrupt handler definiton )
   : ;int immediate
@@ -736,8 +741,8 @@
 
   : int-handle ;int
 
-  ['] int-handle set-nmi!
-  ['] int-handle set-irq!
+  ' int-handle set-nmi!
+  ' int-handle set-irq!
 
   ( new-xt old-xt -- )
   ( Redefines old as new, so that all calls to old
@@ -880,6 +885,6 @@
     UNTILMI
   ] ;
 
-  ['] nmi set-nmi!
+  ' nmi set-nmi!
 
 

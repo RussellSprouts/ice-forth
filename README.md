@@ -64,7 +64,7 @@ hex FF . decimal
 ```
 Welcome to Forth!
 \ Disassembler example
-['] val >impl disas
+' val >impl disas
 ```
 
 ```
@@ -118,7 +118,7 @@ entry pointers are the same.
 ### Subroutine threaded code
 
 The code is compiled to subrouting-threaded code with many inlined
-functions. Try `['] val >impl disas` to the see the disassembly
+functions. Try `' val >impl disas` to the see the disassembly
 for the `val` word.
 
 ### Assembler/Disassembler
