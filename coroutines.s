@@ -184,6 +184,7 @@ defword ">co", 0, TO_CO
 
     ; Restore our stack pointer
     lda TMP3
+    clc
     adc #4 ; deallocate the 2 values
   tax
   rts
