@@ -30,6 +30,7 @@ hex
 ;
 
 : init
+  font 0 mv>ppu
 ;
 
 : done

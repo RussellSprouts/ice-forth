@@ -720,6 +720,32 @@
     then
   ;
 
+  : heredoc immediate
+    word
+    create
+    chere @ 21 +
+    DEX
+    DEX
+    dup <byte LDA.#
+    stack     STA.ZX
+    >byte     LDA.#
+    stack 1+  STA.ZX
+
+    DEX
+    DEX
+    dup <byte LDA.#
+    stack     STA.ZX
+    dup >byte LDA.#
+    stack 1+  STA.ZX
+    RTS
+
+    begin
+      key c,
+      1-
+    dup 0= until
+    drop
+  ;
+
   hex
   ( xt -- )
   : set-reset! 0FFFC ! ;

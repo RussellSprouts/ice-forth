@@ -5,9 +5,28 @@ local ffi = require 'ffi'
 local IO_PORT = 0x401C -- pick a register which is not used on a real NES
 local MEMORY_SIZE = 512 * 1024
 
-local forthCode = io.open('bootstrap.f', 'r')
-local forthCode2 = io.open('game.f', 'r')
-local lastLineInput = forthCode:read'*a' .. forthCode2:read'*a'
+local args = {...}
+local lastLineInput = ''
+do
+  local i = 1
+  while i <= #args do
+    if args[i] == '-b' then
+      -- handle binary files with the syntax 6502.lua -b name:file.bin
+      local name, file = args[i+1]:match('(.+):(.+)')
+      local contents = io.open(file, 'rb'):read'*all'
+      lastLineInput = string.format('%s %x heredoc %s ', lastLineInput, #contents, name) .. contents
+      i = i + 1
+    else
+      -- handle forth files
+      lastLineInput = lastLineInput .. io.open(args[i], 'r'):read'*a'
+    end
+    i = i + 1
+  end
+end
+
+--local forthCode = io.open('bootstrap.f', 'r')
+--local forthCode2 = io.open('game.f', 'r')
+--local lastLineInput = forthCode:read'*a' .. forthCode2:read'*a'
 
 local trace = false
 

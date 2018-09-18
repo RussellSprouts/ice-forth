@@ -466,6 +466,51 @@ defword "oam", 0, OAM_BUFFER_LOC
   push OAM_BUF
   rts
 
+defword "mv>ppu", 0, MV_TO_PPU
+
+  PpuAddr := Stack
+  ; Write to PPUADDR
+  bit $2002
+  lda PpuAddr+1, x
+  sta $2006
+  lda PpuAddr, x
+  sta $2006
+  pop
+
+  End     := Stack
+  Data    := Stack+2
+
+  lda Data, x
+  clc
+  adc End, x
+  sta End, x
+  lda Data+1, x
+  adc End+1, x
+  sta End+1, x
+
+  lda #0
+  sta TMP1
+  lda Data+1, x
+  sta TMP2
+
+  lda End, x
+  sta TMP3
+
+  ldy Data, x
+
+@loop:
+  lda (TMP1), y
+  sta $2007
+  iny
+  bne :+
+  inc TMP2
+: cpy TMP3
+  bne @loop
+  lda TMP2
+  cmp End+1, x
+  bne @loop
+  rts
+
 _flush_vram_update_nmi: rts
 
 palBrightTableL:
