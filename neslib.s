@@ -236,7 +236,7 @@ defword "pal-clear", 0, pal_clear
   sty PAL_UPDATE
   rts
 
-; Set virtual bright for background only
+; Set virtual bright for sprites only
 ; ( brightness -- )
 defword "pal-spr-bright", 0, pal_spr_bright
   ldy Stack, x
@@ -248,7 +248,7 @@ defword "pal-spr-bright", 0, pal_spr_bright
   pop
   rts
 
-; Set virtual bright for sprites only
+; Set virtual bright for background only
 ; ( brightness -- )
 defword "pal-bg-bright", 0, pal_bg_bright
   ldy Stack, x
@@ -397,7 +397,7 @@ defword "ppu-wait-nmi", 0, ppu_wait_nmi
   beq @1
   rts
 
-; Set scroll after screen split invoken by the sprite 0 hit.
+; Set scroll after screen split invoked by the sprite 0 hit.
 ; warning: all CPU time between the function call and the actual split
 ; point will be wasted!
 ; warning: only X scroll can be changed with this version.

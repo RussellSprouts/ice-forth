@@ -8,6 +8,13 @@ hex
 : frame
     colors 1+ 7 and to colors
 
+    0 15 pal-col!
+    1 16 pal-col!
+    2 30 pal-col!
+    3 31 pal-col!
+  
+    18 c-to vppu-mask
+
     addr 1+ and 1FFF to addr
     [
       val-addr addr 1+ LDA
@@ -18,10 +25,12 @@ hex
       2007 STA
     ]
 
-    colors asl asl asl asl asl to vppu-mask
+    vppu-mask 1F and
+    colors asl asl asl asl asl or c-to vppu-mask
 ;
 
-: init ;
+: init
+;
 
 : done
   freeze \ stop emulation and write NES ROM
@@ -33,7 +42,6 @@ hex
   \ Enable NMIs
   [ 80 LDA.#
     2000 STA ]
-
   \ Loop forever and call the frame function each frame
   begin
     ppu-wait-nmi
@@ -69,8 +77,11 @@ hex
   drop
 ;
 
-\ ' print9 co-start .
-\ ' print8 co-start .
-\ 500 ' printany co-start >co
+' print9 co-start .
+' print8 co-start .
+500 ' printany co-start >co
 
-\ 400 printany
+400 printany
+
+4 pal-bright
+80 to vppu-ctrl
