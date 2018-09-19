@@ -35,6 +35,20 @@ defcval "vppu-stat", 0, PPU_STATUS_VAR
 defcval "scroll-x", 0, SCROLL_X_VAR
 defcval "scroll-y", 0, SCROLL_Y_VAR
 
+defcval "joy1", 0, JOY1_VAR
+defcval "joy2", 0, JOY2_VAR
+defcval "oldjoy1", 0, OLD_JOY1
+defcval "oldjoy2", 0, OLD_JOY2
+
+defconst "btnA", $80, BTN_A
+defconst "btnB", $40, BTN_B
+defconst "btnSel", $20, BTN_SELECT
+defconst "btnSt", $10, BUTTON_START
+defconst "btnU", $8, BUTTON_UP
+defconst "btnD", $4, BUTTON_DOWN
+defconst "btnL", $2, BUTTON_LEFT
+defconst "btnR", $1, BUTTON_RIGHT
+
 .segment "ZEROPAGE"
 ; Initialize color brightness to normal.
 PAL_SPR_PTR: .word palBrightTable4
@@ -65,6 +79,9 @@ defword "nmi", 0, NMI
   jeq @skipAll
 
 @doUpdate:
+
+  lda #0
+  sta $4013
 
   lda #>OAM_BUF   ;update OAM
   sta $4014
@@ -145,6 +162,28 @@ defword "nmi", 0, NMI
   inc FRAME_CNT1
 
   jsr FamiToneUpdate
+
+  ; Read controllers
+  lda JOY1_VAR_VALUE
+  sta OLD_JOY1_VALUE
+  lda JOY2_VAR_VALUE
+  sta OLD_JOY2_VALUE
+
+  lda #$01
+  sta $4016
+  sta JOY2_VAR_VALUE
+  lsr
+  sta $4016
+@controllerLoop:
+  lda $4016
+  and #$03
+  cmp #$01
+  rol JOY1_VAR_VALUE
+  lda $4017
+  and #$03
+  cmp #$01
+  rol JOY2_VAR_VALUE
+  bcc @controllerLoop
 
   pla
   tay
@@ -466,6 +505,8 @@ defword "oam", 0, OAM_BUFFER_LOC
   push OAM_BUF
   rts
 
+; Does a bulk copy of data to the PPU
+; ( src len target -- )
 defword "mv>ppu", 0, MV_TO_PPU
 
   PpuAddr := Stack
@@ -509,6 +550,9 @@ defword "mv>ppu", 0, MV_TO_PPU
   lda TMP2
   cmp End+1, x
   bne @loop
+
+  pop
+  pop
   rts
 
 _flush_vram_update_nmi: rts

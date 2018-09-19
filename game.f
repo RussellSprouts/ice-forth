@@ -5,32 +5,54 @@ hex
 0 val colors
 0 val addr
 
+0 c-val spr
+80 c-val Y
+
+( x y -- )
+: draw| 
+  [ char | bl - literal ]
+  0
+  spr oam-spr c-to spr ;
+
+( x y -- )
+: draw-paddle
+  over over 8 +
+  draw| draw|
+;
+
 : frame
-    colors 1+ 7 and to colors
+    \ colors 1+ 7 and to colors
+    0 c-to spr
 
-    0 15 pal-col!
-    1 16 pal-col!
-    2 30 pal-col!
-    3 31 pal-col!
-  
-    18 c-to vppu-mask
+    joy1 btnU and if
+      Y 1- c-to Y
+    then
+    joy1 btnD and if
+      Y 1+ c-to Y
+    then
 
-    addr 1+ and 1FFF to addr
-    [
-      val-addr addr 1+ LDA
-      2006 STA
-      val-addr addr LDA
-      2006 STA
-      val-addr colors LDA
-      2007 STA
-    ]
+    10 \ x
+    Y \ y
+    draw-paddle
+
+    addr 1+ 1FFF and to addr
 
     vppu-mask 1F and
     colors asl asl asl asl asl or c-to vppu-mask
 ;
 
 : init
-  font 0 mv>ppu
+  font 0000 mv>ppu
+  font 1000 mv>ppu
+  [
+    2048 >byte LDA.#
+    2006 STA
+    2048 <byte LDA.#
+    2006 STA
+    char A bl - LDA.#
+    2007 STA
+  ]
+  18 c-to vppu-mask
 ;
 
 : done
@@ -73,7 +95,6 @@ hex
   dsp@ .
   0A 0 do
     dup i + .
-    yield
   loop
   drop
 ;
@@ -84,5 +105,9 @@ hex
 
 400 printany
 
+0 15 pal-col!
+1 16 pal-col!
+2 30 pal-col!
+3 31 pal-col!
 4 pal-bright
-80 to vppu-ctrl
+80 c-to vppu-ctrl
