@@ -10,6 +10,7 @@
 .globalzp F_INLINE
 .globalzp F_HIDDEN
 .global F_END
+.global F_SINGLE_BYTE
 
 ; Temporary storage
 .globalzp TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
@@ -179,7 +180,7 @@
 .endmacro
 
 .macro defcval name, init, label
-  defword name, 0, label
+  defword name, F_SINGLE_BYTE, label
     dex
     dex
     lda .ident(.concat(.string(label), "_VALUE"))

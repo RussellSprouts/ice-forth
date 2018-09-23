@@ -284,6 +284,62 @@
     stack 1+ STY.ZX
   ] ;
 
+  \ See http://www.6502.org/tutorials/compare_beyond.html#6
+  : > [
+    255 LDY.#
+    stack     LDA.ZX
+    stack 2 + CMP.ZX
+    stack 1+  LDA.ZX
+    stack 3 + SBC.ZX
+    IFVS
+      128 EOR.#
+    THEN
+    \ Now N flag contains comparison result
+    IFPL
+      INY
+    THEN
+    INX INX
+    stack    STY.ZX
+    stack 1+ STY.ZX
+  ] ;
+
+  : < [
+    255 LDY.#
+    stack 2 + LDA.ZX
+    stack     CMP.ZX
+    stack 3 + LDA.ZX
+    stack 1+  SBC.ZX
+    IFVS
+      128 EOR.#
+    THEN
+    \ Now N flag contains comparison result
+    IFPL
+      INY
+    THEN
+    INX INX
+    stack    STY.ZX
+    stack 1+ STY.ZX
+  ] ;
+
+  : u< [
+    255 LDY.#
+    stack 1+  LDA.ZX
+    stack 3 + CMP.ZX
+    IFCS
+      IFEQ
+        stack     LDA.ZX
+        stack 2 + CMP.ZX
+        
+      ELSE
+        
+      THEN
+    THEN
+  ] ;
+
+  : u> [
+
+  ] ;
+
   \ Logical shift right
   \ ( u -- u )
   : lsr [
@@ -562,18 +618,28 @@
     drop
   ;
 
+  ( True to hide the word from dictionary searches )
   : ?hidden
     dict::len +
     c@
     32 and
   ;
 
+  ( True if the word is the last in the dictionary )
   : ?end
     dict::flags +
     c@
     128 and
   ;
 
+  ( True if the word is a single-byte val )
+  : ?byte
+    dict::flags +
+    c@
+    64 and
+  ;
+
+  ( True if the word should execute immediately in compile mode )
   : ?immediate
     dict::len +
     c@
@@ -670,6 +736,7 @@
     1 allot
     word
     create ( create a new dictionary entry )
+    dhere @ c-val-tog
     DEX DEX
     dup LDA ( load the value and push it )
     stack STA.ZX
@@ -680,7 +747,7 @@
     !
   ;
 
-  ( Gets the address of a val )
+  ( Gets the address of a val and it's size )
   : val-addr
     word
     find
@@ -691,32 +758,32 @@
       ." Cannot get address of unknown val." cr
       quit
     then
-    >impl 3 + @ ( read variable address from val impl )
+    dup >impl 3 + @ ( read variable address from val impl )
+    swap ?byte
   ;
 
   ( Writes a value to a `val` variable )
   : to immediate
-    val-addr 
+    val-addr
     compiling? if
-      dup
-      stack LDA.ZX
-      STA
-      stack 1+ LDA.ZX
-      1+ STA
-      INX INX
+      if ( single byte )
+        stack LDA.ZX
+        STA
+        INX INX
+      else
+        dup
+        stack LDA.ZX
+        STA
+        stack 1+ LDA.ZX
+        1+ STA
+        INX INX
+      then
     else
-      !
-    then
-  ;
-
-  : c-to immediate
-    val-addr 
-    compiling? if
-      stack LDA.ZX
-      STA
-      INX INX
-    else
-      c!
+      if ( single byte )
+        c!
+      else
+        !
+      then
     then
   ;
 

@@ -47,6 +47,9 @@ F_HIDDEN = $20
 F_INLINE = $40
 ; This is the last entry in the dictionary
 F_END = $8000
+; This is a single-byte val
+F_SINGLE_BYTE = $4000
+
 
 .segment "DICT"
 ; Reserve space to push the dictionary to the end of the memory
@@ -55,7 +58,7 @@ F_END = $8000
 DHERE_PERM_INIT:
 
 .segment "TMP_DICT"
-.res $6AB
+.res $69D
 DHERE_TMP_INIT:
 
 .segment "ZEROPAGE": zeropage
@@ -744,6 +747,16 @@ defwordtmp "hidden", 0, HIDDEN
 
   ldy #(DictEntry::Len)
   lda #F_HIDDEN
+  eor (TMP1), y
+  sta (TMP1), y
+
+  pop
+  rts
+
+defwordtmp "c-val-tog", 0, C_VAL_TOGGLE
+  toTMP1
+  ldy #(DictEntry::Flags2)
+  lda #>F_SINGLE_BYTE
   eor (TMP1), y
   sta (TMP1), y
 

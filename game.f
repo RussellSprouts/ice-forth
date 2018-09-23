@@ -8,11 +8,16 @@ hex
 0 c-val spr
 80 c-val Y
 
+20 val ballvx
+20 val ballvy
+500 val ballx
+800 val bally
+
 ( x y -- )
 : draw| 
   [ char | bl - literal ]
   0
-  spr oam-spr c-to spr ;
+  spr oam-spr to spr ;
 
 ( x y -- )
 : draw-paddle
@@ -20,39 +25,68 @@ hex
   draw| draw|
 ;
 
+( x y -- )
+: draw-ball
+  [ char . bl - literal ] 0 spr oam-spr to spr 
+;
+
 : frame
     \ colors 1+ 7 and to colors
-    0 c-to spr
+    0 to spr
 
     joy1 btnU and if
-      Y 1- c-to Y
+      Y 4 - to Y
     then
     joy1 btnD and if
-      Y 1+ c-to Y
+      Y 4 + to Y
     then
+
+    ballvx ballx + to ballx
+    ballvy bally + to bally
+
+    ballx asr asr asr asr
+    dup 100 > if
+      1000 to ballx
+      ballvx negate to ballvx
+    else dup 0 < if
+      0 to ballx
+      ballvx negate to ballvx
+    then then
+
+    bally asr asr asr asr
+    dup E0 > if
+      E00 to bally
+      ballvy negate to ballvy
+    else dup 0 < if
+      0 to bally
+      ballvy negate to ballvy
+    then then
+    draw-ball
 
     10 \ x
     Y \ y
     draw-paddle
 
+    E0 10 draw-paddle
+
     addr 1+ 1FFF and to addr
 
     vppu-mask 1F and
-    colors asl asl asl asl asl or c-to vppu-mask
+    colors asl asl asl asl asl or to vppu-mask
+    
+    vppu-mask
+    [
+      stack LDA.ZX
+      FE AND.#
+      2001 STA
+    ]
+    drop
 ;
 
 : init
   font 0000 mv>ppu
   font 1000 mv>ppu
-  [
-    2048 >byte LDA.#
-    2006 STA
-    2048 <byte LDA.#
-    2006 STA
-    char A bl - LDA.#
-    2007 STA
-  ]
-  18 c-to vppu-mask
+  19 to vppu-mask
 ;
 
 : done
@@ -95,6 +129,7 @@ hex
   dsp@ .
   0A 0 do
     dup i + .
+    yield
   loop
   drop
 ;
@@ -110,4 +145,4 @@ hex
 2 30 pal-col!
 3 31 pal-col!
 4 pal-bright
-80 c-to vppu-ctrl
+80 to vppu-ctrl
