@@ -220,6 +220,7 @@
   \ Executes the xt on the stack 
   : execute [
     >TMP
+    INX INX
     tmp JMP.I
   ] ;
 
@@ -728,7 +729,7 @@
     ( initialize val )
     !
 
-    ['] always-inline execute drop
+    ['] always-inline execute
   ;
 
   : c-val
