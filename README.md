@@ -43,12 +43,11 @@ Compiling a cartridge has several stages.
 
 ## Running
 
-Edit `make.sh` with the path to your ca65 and ld65 executables.
+Edit `Makefile` with the path to your ca65 and ld65 executables.
 Ensure you have luajit installed.
 
 ```
-$ ./make.sh
-$ luajit 6502.lua
+$ make run
 ```
 
 Try some commands:
@@ -83,6 +82,8 @@ Welcome to Forth!
   decimal
 ] ;
 ```
+
+Once you are ready to try the NES cartridge, use the word `done`.
 
 ## Implementation details
 
