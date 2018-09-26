@@ -492,24 +492,37 @@ defwordtmp "hNum", 0, HANDLE_NUMBER
   lda STATE_VALUE
   beq @executeLiteral
 @compileLiteral:
-  push (DEX_OP | (DEX_OP << 8))
-  jsr COMMA ; compile dex; dex
-  jsr DUP
-  lda Stack, x
-  sta Stack+1, x
-  lda #LDA_IMM_OP
-  sta Stack, x
-  jsr COMMA ; compile LDA #lo
-  push ((STA_ZP_X_OP) | (Stack << 8))
-  jsr COMMA ; compile sta Stack, x
-  lda #LDA_IMM_OP
-  sta Stack, x
-  jsr COMMA ; compile LDA #hi
-  push ((STA_ZP_X_OP) | ((Stack+1) << 8))
-  jsr COMMA ; compile sta Stack+1, x
+  jsr RUN_ASM
+  .byte 1, DEX_OP ; DEX
+  jsr RUN_ASM
+  .byte 1, DEX_OP ; DEX
+  jsr DUP         ; dup
+  jsr RUN_ASM
+  .byte 2, LDA_IMM_OP ; LDA.#
+  push Stack
+  jsr RUN_ASM
+  .byte 2, STA_ZP_X_OP ; stack STA.ZX
+  lda Stack+1, x
+  sta Stack, x ; >byte
+  jsr RUN_ASM
+  .byte 2, LDA_IMM_OP ; LDA.#
+  push Stack+1
+  jsr RUN_ASM
+  .byte 2, STA_ZP_X_OP ; stack 1+ STA.ZX
   rts
 @executeLiteral:
   rts
+
+PushTemplate:
+  dex
+  dex
+PushTemplateLo := *+1
+  lda #0
+  sta Stack, x
+PushTemplateHi := *+1
+  lda #0
+  sta Stack+1, x
+EndPushTemplate:
 
 defwordtmp "d:asm", 0, DICT_ASM
   lda Stack+2, x
