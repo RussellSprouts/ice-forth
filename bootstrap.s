@@ -492,22 +492,22 @@ defwordtmp "hNum", 0, HANDLE_NUMBER
   lda STATE_VALUE
   beq @executeLiteral
 @compileLiteral:
-  jsr RUN_ASM
+  jsr ASM
   .byte 1, DEX_OP ; DEX
-  jsr RUN_ASM
+  jsr ASM
   .byte 1, DEX_OP ; DEX
   jsr DUP         ; dup
-  jsr RUN_ASM
+  jsr ASM
   .byte 2, LDA_IMM_OP ; LDA.#
   push Stack
-  jsr RUN_ASM
+  jsr ASM
   .byte 2, STA_ZP_X_OP ; stack STA.ZX
   lda Stack+1, x
   sta Stack, x ; >byte
-  jsr RUN_ASM
+  jsr ASM
   .byte 2, LDA_IMM_OP ; LDA.#
   push Stack+1
-  jsr RUN_ASM
+  jsr ASM
   .byte 2, STA_ZP_X_OP ; stack 1+ STA.ZX
   rts
 @executeLiteral:
@@ -822,8 +822,9 @@ defwordtmp ":", 0, COLON
 RTS_OP = $60
 
 defwordtmp ";", F_IMMED, SEMICOLON
-  push RTS_OP
-  jsr CCOMMA ; append rts to code
+  ; append rts to code
+  jsr ASM
+  .byte 1, RTS_OP
 
   jsr DHERE
   jsr FETCH
@@ -858,13 +859,9 @@ defwordtmp "hide", 0, HIDE
   jsr FIND
   jmp HIDDEN
 
-CLV_OP = $B8
-BVC_OP = $50
-
-BEQ_OP = $F0
 JSR_OP = $20
 
-defwordtmp "[asm]", 0, RUN_ASM
+defwordtmp "[asm]", 0, ASM
   pla
   sta TMP1
   pla
@@ -912,7 +909,7 @@ defwordtmp "asm-comp", 0, ASM_COMP
 @compile:
   push JSR_OP
   jsr CCOMMA
-  push RUN_ASM
+  push ASM
   jsr COMMA
   jsr CCOMMA
   jsr CCOMMA
