@@ -6,6 +6,7 @@
 .segment "TMP_CODE"
 
 .macpack generic
+.include "forth.inc"
 .import IO_PORT, DUP, FETCH, CFETCH, INCR, SWAP, DOT, DODOTQUOTE, RFIND
 .importzp Stack, TMP1, TMP2, TMP3, TMP4
 

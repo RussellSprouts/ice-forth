@@ -50,7 +50,6 @@ F_END = $8000
 ; This is a single-byte val
 F_SINGLE_BYTE = $4000
 
-
 .segment "DICT"
 ; Reserve space to push the dictionary to the end of the memory
 ; space, since it now grows down.
@@ -58,7 +57,7 @@ F_SINGLE_BYTE = $4000
 DHERE_PERM_INIT:
 
 .segment "TMP_DICT"
-.res $69D
+.res $649
 DHERE_TMP_INIT:
 
 .segment "ZEROPAGE": zeropage
@@ -280,9 +279,8 @@ defwordtmp "word", 0, WORD
 
 defvartmp "base", 10, BASE
 
-; ( str len -- parsed-number )
+; ( str len -- parsed-number non-zero )
 ; or ( str len -- str len 0 ) on error
-; Also, carry is set if there's an error.
 defwordtmp "number", 0, NUMBER
 
   Str := TMP1
@@ -354,22 +352,51 @@ defwordtmp "number", 0, NUMBER
   lda Result+1
   sta Stack+1, x ; put parsed number of the stack.
 
-  push -1
-  clc ; signal OK
+  push HANDLE_NUMBER
   rts
 
 @invalid:
   pla
   tax ; restore stack pointer
-  lda #0
-  dex
-  dex
-  sta Stack, x
-  sta Stack+1, x 
-  sec ; signal the error
+  push 0
   rts
 
-; ( str-ptr len dict-start -- dictionary-pointer )
+defwordtmp "d:perm", 0, DICT_PERM
+  push DHERE_PERM
+  jsr FETCH
+  jmp DFIND
+
+defwordtmp "d:tmp", 0, DICT_TMP
+  push DHERE_TMP
+  jsr FETCH
+  jmp DFIND
+
+defwordtmp "hDict", 0, HANDLE_DICT
+  ; now that we have the dictionary entry, check if it's immediate.
+  toTMP1
+  ldy #(DictEntry::Len)
+  lda (TMP1), y
+  and #F_IMMED
+  bne @execute
+
+  lda STATE_VALUE
+  beq @execute
+@compiling:
+  lda (TMP1), y
+  and #F_INLINE
+  bne @inline
+  push JSR_OP
+  jsr CCOMMA
+  jmp COMMA
+
+@inline: ; simple inlining -- just copy until you see an rts.
+  jmp INLINE
+
+@execute:
+  pop ; drop dictionary pointer
+  jmp (TMP1) ; tailcall to the word, which will return to QUIT
+
+; ( str-ptr len dict-start -- dictionary-pointer handler )
 ; or ( str-ptr len dict-start -- str-ptr len 0 ) if it wasn't found
 ; Searches the dictionary at the given start for the given word.
 defwordtmp "dfind", 0, DFIND
@@ -458,25 +485,75 @@ defwordtmp "dfind", 0, DFIND
   sta Stack, x
   lda LPointer+1
   sta Stack+1, x
+  push HANDLE_DICT
   rts
+
+defwordtmp "hNum", 0, HANDLE_NUMBER
+  lda STATE_VALUE
+  beq @executeLiteral
+@compileLiteral:
+  push (DEX_OP | (DEX_OP << 8))
+  jsr COMMA ; compile dex; dex
+  jsr DUP
+  lda Stack, x
+  sta Stack+1, x
+  lda #LDA_IMM_OP
+  sta Stack, x
+  jsr COMMA ; compile LDA #lo
+  push ((STA_ZP_X_OP) | (Stack << 8))
+  jsr COMMA ; compile sta Stack, x
+  lda #LDA_IMM_OP
+  sta Stack, x
+  jsr COMMA ; compile LDA #hi
+  push ((STA_ZP_X_OP) | ((Stack+1) << 8))
+  jsr COMMA ; compile sta Stack+1, x
+  rts
+@executeLiteral:
+  rts
+
+defwordtmp "d:asm", 0, DICT_ASM
+  lda Stack+2, x
+  sta TMP1
+  lda Stack+3, x
+  sta TMP2
+  jsr ParseInstruction
+  lda Stack, x ; check the length of the instruction parsed.
+  beq :+
+  ; Remove the string
+  lda Stack, x
+  sta Stack+4, x
+  lda Stack+1, x
+  sta Stack+5, x
+  lda Stack+2, x
+  sta Stack+6, x
+  lda Stack+3, x
+  sta Stack+7, x
+  pop
+  pop
+  jsr SWAP
+  jsr DUP
+  jsr DIV3
+  jsr ADD
+  jsr SWAP
+  push ASM_COMP
+: rts
 
 ; ( str-ptr len -- dictionary-pointer )
 ; or ( str-ptr len -- str-ptr len 0 ) if it wasn't found
 ; Searches the dictionary for a definition of the given word.
 defwordtmp "find", 0, FIND
   
-  push DHERE_PERM
-  jsr FETCH
-  jsr DFIND
-  lda Stack, x
-  ora Stack+1, x
+  jsr DICT_PERM
+  cmpTopZero
   beq :+
+  pop
   rts
 : pop
-  push DHERE_TMP
-  jsr FETCH
-  jsr DFIND
-  rts
+  jsr DICT_TMP
+  cmpTopZero
+  beq :+
+  pop
+: rts
 
 ; Given a pointer, gets the name of the dictionary entry,
 ; or an empty string if it's not in the dictionary.
@@ -884,128 +961,32 @@ DEX_OP = $CA
 LDA_IMM_OP = $A9
 STA_ZP_X_OP = $95
 
-defwordtmp "interpret", 0, INTERPRET
-  jsr WORD
-  jsr FIND
-  lda Stack, x
-  ora Stack+1, x
-  beq @notFound
-  
-  ; now that we have the dictionary entry, check if it's immediate.
+defword "execute", 0, EXECUTE
   toTMP1
-  ldy #(DictEntry::Len)
-  lda (TMP1), y
-  and #F_IMMED
-  bne @execute
+  pop
+  jmp (TMP1)
 
-  lda STATE_VALUE
-  beq @execute
-@compiling:
-  lda (TMP1), y
-  and #F_INLINE
-  bne @inline
-  push JSR_OP
-  jsr CCOMMA
-  jmp COMMA
-
-@inline: ; simple inlining -- just copy until you see an rts.
-  jmp INLINE
-
-@execute:
-  pop ; drop dictionary pointer
-  jmp (TMP1) ; tailcall to the word, which will return to QUIT
-
+defwordtmp "interpret", 0, INTERPRET
+  .macro tryDict dict
+    jsr dict
+    cmpTopZero
+    bne @found
+    pop
+  .endmacro
+  jsr WORD
+  tryDict DICT_PERM
+  tryDict DICT_TMP
+  tryDict NUMBER
+  tryDict DICT_ASM
 @notFound:
-  pop ; drop 0 error
-  ; Didn't find the word in the dictionary, maybe it's a literal.
-  jsr NUMBER ; parse as number 
-  bcs @nan ; if error code set
-  pop ; drop the truth value on the stack.
-  ; Now we have a number on the top of stack.
-  lda STATE_VALUE
-  beq @executeLiteral
-@compileLiteral:
-  push (DEX_OP | (DEX_OP << 8))
-  jsr COMMA ; compile dex; dex
-  jsr DUP
-  lda Stack, x
-  sta Stack+1, x
-  lda #LDA_IMM_OP
-  sta Stack, x
-  jsr COMMA ; compile LDA #lo
-  push ((STA_ZP_X_OP) | (Stack << 8))
-  jsr COMMA ; compile sta Stack, x
-  lda #LDA_IMM_OP
-  sta Stack, x
-  jsr COMMA ; compile LDA #hi
-  push ((STA_ZP_X_OP) | ((Stack+1) << 8))
-  jsr COMMA ; compile sta Stack+1, x
-  rts
-@executeLiteral:
-@return:
-  rts
-
-@nan:
-  pop
-  ; It's not a number
-  lda Stack+2, x
-  sta TMP1
-  lda Stack+3, x
-  sta TMP2
-  jsr ParseInstruction
-  lda Stack, x ; check the length of the instruction parsed.
-  beq :+
-  ; Remove the string
-  lda Stack, x
-  sta Stack+4, x
-  lda Stack+1, x
-  sta Stack+5, x
-  lda Stack+2, x
-  sta Stack+6, x
-  lda Stack+3, x
-  sta Stack+7, x
-  inx
-  inx
-  inx
-  inx
-  jsr SWAP
-  jsr DUP
-  jsr DIV3
-  jsr ADD
-  jsr SWAP
-  jsr ASM_COMP
-  rts
-:
-  ; It's not in the dictionary, it's not a number, and not an instruction.
-  ; Show the error message.
-  pop ; drop 0
-  lda Stack+2, x
-  sta TMP1
-  lda Stack+3, x
-  sta TMP2 ; TMP12 = str-pointer
-
-  ldy #0
-@messageLoop:
-  lda @errorMessage, y
-  beq @printWord
+  jsr DODOTQUOTE
+  .byte "ERROR: Couldn't find word ", '"', 0
+  jsr TYPE
+  lda #'"'
   sta IO_PORT
-  iny 
-  bne @messageLoop ; bra
-@printWord:
-  ldy #0
-@printWordLoop:
-  lda (TMP1), y
-  sta IO_PORT
-  iny
-  tya
-  cmp Stack, x
-  bne @printWordLoop; if y != string length
-  pop
-  pop ; discard string length and pointer.
-  rts ; return to QUIT
-
-@errorMessage:
-  .byte $A, "ERROR: Couldn't find word: ", 0
+  rts
+@found:
+  jmp EXECUTE
 
 defwordtmp ".", 0, DOT
   ; Set the V flag. While v is set, we will skip
@@ -1054,7 +1035,6 @@ defwordtmp ".", 0, DOT
 
 HexDigits: .byte "0123456789ABCDEF"
 
-
 ; Prints out the following bytes as a zero-terminated string.
 ; Use like:
 ;   jsr DODOTQUOTE
@@ -1082,6 +1062,37 @@ defwordtmp "(.')", 0, DODOTQUOTE
   pha
   lda TMP1
   pha
+  rts
+
+; ( str-addr len -- )
+; Prints a string
+defwordtmp "type", 0, TYPE
+  clc
+  lda Stack, x
+  adc Stack+2, x
+  sta Stack, x
+  lda Stack+1, x
+  adc Stack+3, x
+  sta Stack+1, x
+
+@loop:
+  lda Stack, x
+  cmp Stack+2, x
+  bne :+
+  lda Stack+1, x
+  cmp Stack+3, x
+  beq @done
+: lda (Stack+2, x)
+  sta IO_PORT
+
+  inc Stack+2, x
+  bne :+
+  inc Stack+3, x
+: clv
+  bvc @loop ; bra
+@done:
+  pop
+  pop
   rts
 
 ; ( addr -- addr+1 c )

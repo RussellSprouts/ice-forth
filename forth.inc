@@ -70,6 +70,11 @@
   sta Stack+1, x
 .endmacro
 
+.macro cmpTopZero
+  lda Stack, x
+  ora Stack+1, x
+.endmacro
+
 ; The structure of a dictionary entry.
 .struct DictEntry
   Jmp .byte

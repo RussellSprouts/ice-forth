@@ -217,13 +217,6 @@
  
 <perm> definitions:
 
-  \ Executes the xt on the stack 
-  : execute [
-    >TMP
-    INX INX
-    tmp JMP.I
-  ] ;
-
   : = [
     INX INX
     stack 2 - LDA.ZX
