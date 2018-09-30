@@ -3,6 +3,7 @@
 *.o
 debug.txt
 bootstrap.bin
+6502
 ops.out
 ram.out
 *.nes.deb

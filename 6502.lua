@@ -14,7 +14,7 @@ do
       -- handle binary files with the syntax 6502.lua -b name:file.bin
       local name, file = args[i+1]:match('(.+):(.+)')
       local contents = io.open(file, 'rb'):read'*all'
-      lastLineInput = string.format('%s %x heredoc %s ', lastLineInput, #contents, name) .. contents
+      lastLineInput = string.format(' %s %x heredoc %s ', lastLineInput, #contents, name) .. contents
       i = i + 1
     else
       -- handle forth files
@@ -147,8 +147,7 @@ m = {
     return m.set(m.read(addr) + m.read(addrPlus1) * 256, val)
   end,
   readIndirectY = function()
-    m.ip = m.ip + 1
-    local addr = m.read(m.ip)
+    local addr = m.readImmediate()
     local addrPlus1 = bit.band(addr + 1, 0xFF)
     return m.read(m.read(addr) + m.read(addrPlus1) * 256 + m.y)
   end,
@@ -333,7 +332,7 @@ local opcodes = {
   [0x8C] = {'STY', function() m.storeAbsolute(m.y) end},
 
   -- tsx/txs
-  [0xBA] = {'TSX', function() m.x = m.sp end},
+  [0xBA] = {'TSX', function() m.x = m.setSZ(m.sp) end},
   [0x9A] = {'TXS', function() m.sp = m.x end},
 
   -- pha/pla

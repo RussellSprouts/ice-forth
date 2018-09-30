@@ -316,6 +316,7 @@
   ] ;
 
   : u< [
+    \ TODO
     255 LDY.#
     stack 1+  LDA.ZX
     stack 3 + CMP.ZX
@@ -331,7 +332,7 @@
   ] ;
 
   : u> [
-
+    \ TODO
   ] ;
 
   \ Logical shift right

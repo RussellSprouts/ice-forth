@@ -13,6 +13,9 @@ hex
 500 val ballx
 800 val bally
 
+ballx val oldballx
+bally val oldbally
+
 ( x y -- )
 : draw| 
   [ char | bl - literal ]
@@ -68,6 +71,9 @@ hex
     draw-paddle
 
     E0 10 draw-paddle
+
+    ballx to oldballx
+    bally to oldbally
 
     addr 1+ 1FFF and to addr
 
