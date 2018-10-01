@@ -6,6 +6,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <exception>
 
 #define IO_PORT 0x401C
 #define MEMORY_SIZE (64*1024)
@@ -34,19 +35,20 @@ static bool trace;
 static std::string lastLineInput;
 static size_t lineIndex = 0;
 
-uint8_t nextChar() {
+typedef struct OutOfInputException
+  : public std::exception
+  {} OutOfInputException;
+
+static uint8_t nextChar() {
   if (lineIndex == lastLineInput.size()) {
-    lastLineInput.clear();
-    std::getline(std::cin, lastLineInput);
-    lastLineInput += "\n";
-    lineIndex = 0;
+    throw OutOfInputException();
   }
   uint8_t result = lastLineInput[lineIndex];
   lineIndex++;
   return result;
 }
 
-uint8_t read(uint16_t addr) {
+static uint8_t read(uint16_t addr) {
   if (addr == IO_PORT) {
     return nextChar();
   } else {
@@ -54,7 +56,7 @@ uint8_t read(uint16_t addr) {
   }
 }
 
-void set(uint16_t addr, uint8_t val) {
+static void set(uint16_t addr, uint8_t val) {
   if (addr == IO_PORT) {
     putchar(val);
   } else {
@@ -62,193 +64,192 @@ void set(uint16_t addr, uint8_t val) {
   }
 }
 
-uint8_t pop() {
+static uint8_t pop() {
   m.sp = m.sp + 1;
   return read(0x100 + m.sp);
 }
 
-void push(uint8_t val) {
+static void push(uint8_t val) {
   set(0x100 + m.sp, val);
   m.sp = m.sp - 1;
 }
 
-uint16_t getAbsolute() {
+static uint16_t getAbsolute() {
   m.ip = m.ip + 2;
-  return read(m.ip - 1) + (read(m.ip) << 8);
+  uint8_t low = read(m.ip - 1);
+  return low + (read(m.ip) << 8);
 }
 
-uint8_t readImmediate() {
+static uint8_t readImmediate() {
   m.ip = m.ip + 1;
   return read(m.ip);
 }
 
-uint8_t readZeroPage() {
+static uint8_t readZeroPage() {
   m.ip = m.ip + 1;
   return read(read(m.ip));
 }
 
-void storeZeroPage(uint8_t val) {
+static void storeZeroPage(uint8_t val) {
   m.ip = m.ip + 1;
   set(read(m.ip), val);
 }
 
-uint8_t readZeroPageX() {
+static uint8_t readZeroPageX() {
   m.ip = m.ip + 1;
   return read(0xFF & (read(m.ip) + m.x));
 }
 
-void storeZeroPageX(uint8_t val) {
+static void storeZeroPageX(uint8_t val) {
   m.ip = m.ip + 1;
   set(0xFF & (read(m.ip) + m.x), val);
 }
 
-uint8_t readZeroPageY() {
+static uint8_t readZeroPageY() {
   m.ip = m.ip + 1;
   return read(0xFF & (read(m.ip) + m.y));
 }
 
-void storeZeroPageY(uint8_t val) {
+static void storeZeroPageY(uint8_t val) {
   m.ip = m.ip + 1;
   uint16_t addr = read(m.ip) + m.y;
   set(0xFF & addr, val);
 }
 
-uint8_t readAbsolute() {
+static uint8_t readAbsolute() {
   return read(getAbsolute());
 }
 
-void storeAbsolute(uint8_t val) {
+static void storeAbsolute(uint8_t val) {
   set(getAbsolute(), val);
 }
 
-uint8_t readAbsoluteX() {
+static uint8_t readAbsoluteX() {
   return read(m.x + getAbsolute());
 }
 
-void storeAbsoluteX(uint8_t val) {
+static void storeAbsoluteX(uint8_t val) {
   set(m.x + getAbsolute(), val);
 }
 
-uint8_t readAbsoluteY() {
+static uint8_t readAbsoluteY() {
   return read(m.y + getAbsolute());
 }
 
-void storeAbsoluteY(uint8_t val) {
+static void storeAbsoluteY(uint8_t val) {
   set(m.y + getAbsolute(), val);
 }
 
-uint16_t readIndirect() {
+static uint16_t readIndirect() {
   uint16_t addr = getAbsolute();
   uint16_t addrPlus1 = addr + 1;
   // adjust for jmp indirect bug
   if ((addrPlus1 & 0xFF) == 0) {
     addrPlus1 -= 0x100;
   }
-  return read(addr) + (read(addrPlus1) << 8);
+  uint8_t low = read(addr);
+  return low + (read(addrPlus1) << 8);
 }
 
-uint8_t readIndirectX() {
+static uint8_t readIndirectX() {
   uint8_t zpAddr = readImmediate() + m.x;
   uint8_t addrPlus1 = zpAddr + 1;
-  return read(read(zpAddr) + (read(addrPlus1) << 8));
+  uint8_t low = read(zpAddr);
+  return read(low + (read(addrPlus1) << 8));
 }
 
-void storeIndirectX(uint8_t val) {
+static void storeIndirectX(uint8_t val) {
   uint8_t zpAddr = readImmediate() + m.x;
   uint8_t addrPlus1 = zpAddr + 1;
-  set(read(zpAddr) + (read(addrPlus1) << 8), val);
+  uint8_t low = read(zpAddr);
+  set(low + (read(addrPlus1) << 8), val);
 }
 
-uint8_t readIndirectY() {
+static uint8_t readIndirectY() {
   uint8_t addr = readImmediate();
   uint8_t addrPlus1 = addr + 1;
-  return read(read(addr) + (read(addrPlus1) << 8) + m.y);
+  uint8_t low = read(addr);
+  return read(low + (read(addrPlus1) << 8) + m.y);
 }
 
-void storeIndirectY(uint8_t val) {
+static void storeIndirectY(uint8_t val) {
   uint8_t addr = readImmediate();
   uint8_t addrPlus1 = addr + 1;
-  set(read(addr) + (read(addrPlus1) << 8) + m.y, val);
+  uint8_t low = read(addr);
+  set(low + (read(addrPlus1) << 8) + m.y, val);
 }
 
-uint8_t setSZ(uint8_t val) {
+static uint8_t setSZ(uint8_t val) {
   m.status.s = val >= 0x80;
   m.status.z = val == 0;
   return val;
 }
 
-void printStack() {
-  printf("STACK: sp:%02x", m.sp);
-  for (int i = 0xFF; i >= m.sp+1; i--) {
-    printf("%02x ", m.memory[0x100 + i]);
-  }
-}
-
-void BIT(uint8_t read) {
+static void BIT(uint8_t read) {
   m.status.z = m.a & read;
   m.status.n = read & 0x80;
   m.status.v = read & 0x40;
 }
 
-void LDA(uint8_t value) {
+static void LDA(uint8_t value) {
   m.a = setSZ(value);
 }
 
-void LDX(uint8_t value) {
+static void LDX(uint8_t value) {
   m.x = setSZ(value);
 }
 
-void LDY(uint8_t value) {
+static void LDY(uint8_t value) {
   m.y = setSZ(value);
 }
 
-void INC(uint16_t addr) {
+static void INC(uint16_t addr) {
   set(addr, setSZ(read(addr) + 1));
 }
 
-void DEC(uint16_t addr) {
+static void DEC(uint16_t addr) {
   set(addr, setSZ(read(addr) - 1));
 }
 
-void AND(uint8_t value) {
+static void AND(uint8_t value) {
   m.a = setSZ(m.a & value);
 }
 
-void ORA(uint8_t value) {
+static void ORA(uint8_t value) {
   m.a = setSZ(m.a | value);
 }
 
-void EOR(uint8_t value) {
+static void EOR(uint8_t value) {
   m.a = setSZ(m.a ^ value);
 }
 
-void ASL(uint16_t addr) {
+static void ASL(uint16_t addr) {
   uint8_t value = read(addr);
   m.status.c = value >= 0x80;
   set(addr, setSZ(value << 1));
 }
 
-void ROL(uint16_t addr) {
+static void ROL(uint16_t addr) {
   uint8_t value = read(addr);
   uint8_t c = m.status.c ? 1 : 0;
   m.status.c = value >= 0x80;
   set(addr, setSZ((value << 1) + c));
 }
 
-void LSR(uint16_t addr) {
+static void LSR(uint16_t addr) {
   uint8_t value = read(addr);
   m.status.c = value & 1;
   set(addr, setSZ((value >> 1) & 0x7F));
 }
 
-void ROR(uint16_t addr) {
+static void ROR(uint16_t addr) {
   uint8_t value = read(addr);
   uint8_t c = m.status.c ? 0x80 : 0;
   m.status.c = value & 1;
   set(addr, setSZ(((value >> 1) & 0x7F) + c));
 }
 
-void BRANCH(uint8_t condition) {
+static void BRANCH(uint8_t condition) {
   uint8_t disp = readImmediate();
   if (condition) {
     if (disp >= 0x80) {
@@ -258,25 +259,25 @@ void BRANCH(uint8_t condition) {
   }
 }
 
-void ADC(uint8_t value) {
+static void ADC(uint8_t value) {
   uint16_t newValue = m.a + value + !!m.status.c;
   m.status.c = newValue > 0xFF;
   m.status.v = !((m.a ^ value) & 0x80) && ((m.a ^ newValue) & 0x80);
   m.a = setSZ((uint8_t)newValue);
 }
 
-void SBC(uint8_t value) {
+static void SBC(uint8_t value) {
   ADC(~value);
 }
 
-void CMP(uint8_t a, uint8_t b) {
+static void CMP(uint8_t a, uint8_t b) {
   uint8_t comparison = a - b;
   m.status.z = comparison == 0;
   m.status.c = a >= b;
   m.status.n = comparison >= 0x80;
 }
 
-void SET_P(uint8_t a) {
+static void SET_P(uint8_t a) {
   m.status.n = a & 0x80;
   m.status.v = a & 0x40;
   m.status.d = a & 0x08;
@@ -598,6 +599,7 @@ int main(int argc, char **argv) {
   while (true) {
     if (m.ip == 0xFFFF) { break; }
 
+    uint16_t ip = m.ip;
     uint8_t opcode = readImmediate();
     if (opcodes[opcode].handler == nullptr) {
       printf("\n\nUnkown opcode $%02x\n", opcode);
@@ -621,7 +623,19 @@ int main(int argc, char **argv) {
           m.y,
           m.status.v);
       }
-      opcodes[opcode].handler();
+      try {
+        opcodes[opcode].handler();
+      } catch (OutOfInputException &e) {
+        // The instruction ran, but didn't have
+        // enough user input to finish. Reset the
+        // instruction pointer, get more input, and
+        // try again.
+        m.ip = ip;
+        lastLineInput.clear();
+        std::getline(std::cin, lastLineInput);
+        lastLineInput += "\n";
+        lineIndex = 0;
+      }
     }
   }
 
