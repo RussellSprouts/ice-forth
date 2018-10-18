@@ -65,9 +65,20 @@ static uint8_t pop() {
   return read(0x100 + m.sp);
 }
 
+static uint16_t popAddr() {
+  uint8_t lo = pop();
+  uint16_t hi = pop() << 8;
+  return hi + lo;
+}
+
 static void push(uint8_t val) {
   set(0x100 + m.sp, val);
   m.sp = m.sp - 1;
+}
+
+static void pushAddr(uint16_t addr) {
+  push(addr >> 8);
+  push(addr);
 }
 
 static uint8_t immediate() {
@@ -122,7 +133,6 @@ static uint8_t setSZ(uint8_t val) {
   m.status.z = val == 0;
   return val;
 }
-
 static void BIT(uint8_t read) {
   m.status.z = m.a & read;
   m.status.n = read & 0x80;
@@ -138,10 +148,21 @@ static void AND(uint8_t value) { m.a = setSZ(m.a & value); }
 static void ORA(uint8_t value) { m.a = setSZ(m.a | value); }
 static void EOR(uint8_t value) { m.a = setSZ(m.a ^ value); }
 
+static void ASL_A() {
+  m.status.c = m.a >= 0x80;
+  m.a = setSZ(m.a << 1);
+}
+
 static void ASL(uint16_t addr) {
   uint8_t value = read(addr);
   m.status.c = value >= 0x80;
   set(addr, setSZ(value << 1));
+}
+
+static void ROL_A() {
+  uint8_t c = m.status.c;
+  m.status.c = m.a >= 0x80;
+  m.a = setSZ((m.a << 1) + c);
 }
 
 static void ROL(uint16_t addr) {
@@ -151,17 +172,28 @@ static void ROL(uint16_t addr) {
   set(addr, setSZ((value << 1) + c));
 }
 
+static void LSR_A() {
+  m.status.c = m.a & 1;
+  m.a = setSZ(m.a >> 1);
+}
+
 static void LSR(uint16_t addr) {
   uint8_t value = read(addr);
   m.status.c = value & 1;
-  set(addr, setSZ((value >> 1) & 0x7F));
+  set(addr, setSZ(value >> 1));
+}
+
+static void ROR_A() {
+  uint8_t c = m.status.c ? 0x80 : 0;
+  m.status.c = m.a & 1;
+  m.a = setSZ((m.a >> 1) + c);
 }
 
 static void ROR(uint16_t addr) {
   uint8_t value = read(addr);
   uint8_t c = m.status.c ? 0x80 : 0;
   m.status.c = value & 1;
-  set(addr, setSZ(((value >> 1) & 0x7F) + c));
+  set(addr, setSZ((value >> 1) + c));
 }
 
 static void BRANCH(uint8_t condition) {
@@ -172,6 +204,10 @@ static void BRANCH(uint8_t condition) {
     }
     m.ip = m.ip + disp;
   }
+}
+
+static void JMP(uint16_t addr) {
+  m.ip = addr - 1;
 }
 
 static void ADC(uint8_t value) {
@@ -199,6 +235,17 @@ static void SET_P(uint8_t a) {
   m.status.c = a & 0x01;
 }
 
+static uint8_t GET_P() {
+  return (m.status.n ? 0x80 : 0)
+    | (m.status.v ? 0x40 : 0)
+    | 0x20
+    | 0x10
+    | (m.status.d ? 0x08 : 0)
+    | (m.status.i ? 0x04 : 0)
+    | (m.status.z ? 0x02 : 0)
+    | (m.status.c ? 0x01 : 0);
+}
+
 typedef struct Handler {
   const char *name;
   void (*handler)();
@@ -219,6 +266,10 @@ void initOpcodes() {
   opcodes[0xB9] = {"LDA ABSY", []{ LDA(read(absoluteY())); }};
   opcodes[0xA1] = {"LDA INDX", []{ LDA(read(indirectX())); }};
   opcodes[0xB1] = {"LDA INDY", []{ LDA(read(indirectY())); }};
+
+  opcodes[0x8A] = {"TXA", []{ LDA(m.x); }};
+  opcodes[0x98] = {"TYA", []{ LDA(m.y); }};
+
   // sta
   opcodes[0x85] = {"STA", []{ set(zeroPage(), m.a); }};
   opcodes[0x95] = {"STA", []{ set(zeroPageX(), m.a); }};
@@ -234,10 +285,16 @@ void initOpcodes() {
   opcodes[0xB6] = {"LDX", []{ LDX(read(zeroPageY())); }};
   opcodes[0xAE] = {"LDX", []{ LDX(read(absolute())); }};
   opcodes[0xBE] = {"LDX", []{ LDX(read(absoluteY())); }};
+  opcodes[0xAA] = {"TAX", []{ LDX(m.a); }};
+  opcodes[0xCA] = {"DEX", []{ LDX(m.x - 1); }};
+  opcodes[0xE8] = {"INX", []{ LDX(m.x + 1); }};
+  opcodes[0xBA] = {"TSX", []{ LDX(m.sp); }};
+
   // stx
   opcodes[0x86] = {"STX", []{ set(zeroPage(), m.x); }};
   opcodes[0x96] = {"STX", []{ set(zeroPageY(), m.x); }};
   opcodes[0x8E] = {"STX", []{ set(absolute(), m.x); }};
+  opcodes[0x9A] = {"TXS", []{ m.sp = m.x; }};
 
   // ldy
   opcodes[0xA0] = {"LDY", []{ LDY(immediate()); }};
@@ -245,47 +302,22 @@ void initOpcodes() {
   opcodes[0xB4] = {"LDY", []{ LDY(read(zeroPageX())); }};
   opcodes[0xAC] = {"LDY", []{ LDY(read(absolute())); }};
   opcodes[0xBC] = {"LDY", []{ LDY(read(absoluteX())); }};
+
+  opcodes[0xA8] = {"TAY", []{ LDY(m.a); }};
+  opcodes[0x88] = {"DEY", []{ LDY(m.y - 1); }};
+  opcodes[0xC8] = {"INY", []{ LDY(m.y + 1); }};
+
   // sty
   opcodes[0x84] = {"STY", []{ set(zeroPage(), m.y); }};
   opcodes[0x94] = {"STY", []{ set(zeroPageX(), m.y); }};
   opcodes[0x8C] = {"STY", []{ set(absolute(), m.y); }};
 
-  // tsx/txs
-  opcodes[0xBA] = {"TSX", []{ m.x = setSZ(m.sp); }};
-  opcodes[0x9A] = {"TXS", []{ m.sp = m.x; }};
-
   // pha/pla
   opcodes[0x48] = {"PHA", []{ push(m.a); }};
-  opcodes[0x68] = {"PLA", []{ m.a = pop(); }};
+  opcodes[0x68] = {"PLA", []{ LDA(pop()); }};
 
-  opcodes[0x08] = {"PHP", []{
-    push(
-      (m.status.n ? 0x80 : 0)
-      | (m.status.v ? 0x40 : 0)
-      | 0x20
-      | 0x10
-      | (m.status.d ? 0x08 : 0)
-      | (m.status.i ? 0x04 : 0)
-      | (m.status.z ? 0x02 : 0)
-      | (m.status.c ? 0x01 : 0));
-  }};
+  opcodes[0x08] = {"PHP", []{ push(GET_P()); }};
   opcodes[0x28] = {"PLP", []{ SET_P(pop()); }};
-
-  // tax/txa
-  opcodes[0xAA] = {"TAX", []{ m.x = setSZ(m.a); }};
-  opcodes[0x8A] = {"TXA", []{ m.a = setSZ(m.x); }};
-
-  // dex/inx
-  opcodes[0xCA] = {"DEX", []{ m.x = setSZ(m.x - 1); }};
-  opcodes[0xE8] = {"INX", []{ m.x = setSZ(m.x + 1); }};
-
-  // tay/tya
-  opcodes[0xA8] = {"TAY", []{ m.y = setSZ(m.a); }};
-  opcodes[0x98] = {"TYA", []{ m.a = setSZ(m.y); }};
-
-  // dey/iny
-  opcodes[0x88] = {"DEY", []{ m.y = setSZ(m.y - 1); }};
-  opcodes[0xC8] = {"INY", []{ m.y = setSZ(m.y + 1); }};
 
   // nop
   opcodes[0xEA] = {"NOP", []{ }};
@@ -303,8 +335,8 @@ void initOpcodes() {
   opcodes[0xDE] = {"DEC", []{ DEC(absoluteX()); }};
 
   // jmp
-  opcodes[0x4C] = {"JMP", []{ m.ip = absolute() - 1; }};
-  opcodes[0x6C] = {"JMPI", []{ m.ip = indirect() - 1; }};
+  opcodes[0x4C] = {"JMP", []{ JMP(absolute()); }};
+  opcodes[0x6C] = {"JMPI", []{ JMP(indirect()); }};
 
   // flag instructions
   opcodes[0x18] = {"CLC", []{ m.status.c = 0; }};
@@ -346,68 +378,37 @@ void initOpcodes() {
   opcodes[0x51] = {"EOR", []{ EOR(read(indirectY())); }};
 
   // asl
-  opcodes[0x0A] = {"ASL", []{
-    m.status.c = m.a & 0x80;
-    m.a = setSZ(m.a << 1);
-  }};
+  opcodes[0x0A] = {"ASL", []{ ASL_A(); }};
   opcodes[0x06] = {"ASL", []{ ASL(zeroPage()); }};
   opcodes[0x16] = {"ASL", []{ ASL(zeroPageX()); }};
   opcodes[0x0E] = {"ASL", []{ ASL(absolute()); }};
   opcodes[0x1E] = {"ASL", []{ ASL(absoluteX()); }};
 
   // lsr
-  opcodes[0x4A] = {"LSR", []{
-    m.status.c = m.a & 1;
-    m.a = setSZ(m.a >> 1);
-  }};
+  opcodes[0x4A] = {"LSR", []{ LSR_A(); }};
   opcodes[0x46] = {"LSR", []{ LSR(zeroPage()); }};
   opcodes[0x56] = {"LSR", []{ LSR(zeroPageX()); }};
   opcodes[0x4E] = {"LSR", []{ LSR(absolute()); }};
   opcodes[0x5E] = {"LSR", []{ LSR(absoluteX()); }};
 
   // rol
-  opcodes[0x2A] = {"ROL", []{
-    bool c = m.status.c;
-    m.status.c = m.a & 0x80;
-    m.a = setSZ((m.a << 1) + c);
-  }};
+  opcodes[0x2A] = {"ROL", []{ ROL_A(); }};
   opcodes[0x26] = {"ROL", []{ ROL(zeroPage()); }};
   opcodes[0x36] = {"ROL", []{ ROL(zeroPageX()); }};
   opcodes[0x2E] = {"ROL", []{ ROL(absolute()); }};
   opcodes[0x3E] = {"ROL", []{ ROL(absoluteX()); }};
 
   // ror
-  opcodes[0x6A] = {"ROR", []{
-    uint8_t c = m.status.c ? 0x80 : 0;
-    m.status.c = m.a & 1;
-    m.a = setSZ((m.a >> 1) + c);
-  }};
+  opcodes[0x6A] = {"ROR", []{ ROR_A(); }};
   opcodes[0x66] = {"ROR", []{ ROR(zeroPage()); }};
   opcodes[0x76] = {"ROR", []{ ROR(zeroPageX()); }};
   opcodes[0x6E] = {"ROR", []{ ROR(absolute()); }};
   opcodes[0x7E] = {"ROR", []{ ROR(absoluteX()); }};
 
-  // jsr
-  opcodes[0x20] = {"JSR", []{
-    uint16_t target = absolute();
-    push(m.ip >> 8);
-    push(m.ip);
-    m.ip = target - 1;
-  }};
-
-  // rts
-  opcodes[0x60] = {"RTS", []{
-    uint8_t lo = pop();
-    uint16_t hi = pop() << 8;
-    m.ip = hi + lo;
-  }};
-
-  opcodes[0x40] = {"RTI", []{
-    SET_P(pop());
-    uint8_t lo = pop();
-    uint16_t hi = pop() << 8;
-    m.ip = hi + lo - 1;
-  }};
+  // jsr/rts/rti
+  opcodes[0x20] = {"JSR", []{ pushAddr(m.ip + 2); JMP(absolute()); }};
+  opcodes[0x60] = {"RTS", []{ JMP(popAddr() + 1); }};
+  opcodes[0x40] = {"RTI", []{ SET_P(pop()); JMP(popAddr()); }};
 
   // branch
   opcodes[0x10] = {"BPL", []{ BRANCH(!m.status.n); }};
