@@ -38,7 +38,7 @@ Compiling a cartridge has several stages.
 
 - Not really compliant with ANS Forth :/
 - Subroutine-threaded compilation
-- Includes assembler and disassembler for NMOS 6502.
+- Includes assembler and disassembler for NMOS 6502, written in 6502 assembly.
 - Alpha state -- very buggy
 
 ## Running
@@ -139,10 +139,10 @@ Each instruction has a value from 0-13 indicating the index of the first
 letter of the opcode in this list of letters. There are similar lists for
 the second and third letters of each opcode. A slight complication arises
 for the second letters. Among all of the opcodes, there are 18 different
-letters used. The easiest way to work around this is to have special cases
+letters used. The easiest way to work around this was to have special cases
 for `txa`, `tya`, and `txs`, which are the only instructions which use
-x or y as the second letter. This brings the list of second letters down
-to 16.
+x or y as the second letter, and have only an implied addressing mode.
+ This brings the list of second letters down to 16.
 
 To save a bit more space, we make use of the fact that there are no
 legal 6502 instructions which end in the binary sequence `%11`. These are
@@ -168,15 +168,16 @@ at `chere`. For example, a Forth definition for LDA would look like this:
 parameters indicating the opcode and number of argument bytes for the
 instruction. `[asm]` will handle the runtime semantics of the instruction.
 
-### The `6502.lua` emulator
+### The 6502 emulator
 
-A simple emulator written in Lua is included. It is a very basic emulator,
+A simple emulator written in C++ is included. It is a very basic emulator,
 probably has bugs even in basic operations, and not all instructions are
-supported. (e.g. BRK and interrupts are unsupported)
+supported. (e.g. BRK and interrupts are unsupported). Like the NES, it doesn't
+include the
 
 To assist in debugging, these extra instructions are added:
-- `$FF` enters debug mode. In trace mode, each instruction is logged with info about the machine state.
-- `$EF` exits debug mode.
+- `$FF` enters trace mode. In trace mode, each instruction is logged with info about the machine state.
+- `$EF` exits trace mode.
 - `$DF` Takes a zero-terminated string as an argument, and prints it to the console.
 
 An IO port at `$401C` powers the REPL. The emulator reads from stdin line-by-line,

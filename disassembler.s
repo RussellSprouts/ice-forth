@@ -1,45 +1,56 @@
-; -----------------------------------------------
-; Implements a self-hosting 6502 disassembler
-; It's a very basic one-pass disassembler.
-; -----------------------------------------------
+; This file has a simple assembler and disassembler
+; for 6502 code.
+;
+; The assembler words are the standard 6502 mnemonics
+; in all uppercase, and are available from Forth.
+; A tail like `.ZX` defines the addressing mode of the
+; instruction.
+; There are 139 instructions, so it would take a lot
+; of space to include all of them in the dictionary. Instead,
+; there's a table with 16 bits for each instruction, enough
+; information to identify the instruction name and addressing
+; mode.
 
 .segment "TMP_CODE"
 
 .macpack generic
 .include "forth.inc"
-.import IO_PORT, DUP, FETCH, CFETCH, INCR, SWAP, DOT, DODOTQUOTE, RFIND
+.import DUP, FETCH, CFETCH, INCR, SWAP, DOT, DODOTQUOTE, RFIND
 .importzp Stack, TMP1, TMP2, TMP3, TMP4
 
 ; To save space, the 3 letters and addressing mode of the
-; instruction are stored in 4-bits each for every instruction.
-; Turns out we can almost fit all of the instructions with
+; instruction are stored in 4-bits each.
+; Turns out we can almost fit all of the letters with
 ; just 16 possiblitiies for each one. (See below for the
 ; exceptions).
+
+; See http://www.obelisk.me.uk/6502/addressing.html for an explanation
+; of the different addressing modes.
 .enum mode
   impl = 0 ; no args
-  acc = $10 ; accumulator is arg
+  acc = $10 ; accumulator is arg, used for modifying instructions which can take A.
   
   ; 1 byte arg
-  imm = $20
-  rel = $30
-  indx = $40
-  indy = $50
-  zpg = $60
-  zpgx = $70
-  zpgy = $80
+  imm = $20  ; immediate mode
+  rel = $30  ; relative mode, used by branch instructions
+  indx = $40 ; (indirect, x) addressing mode
+  indy = $50 ; (indirect), y addressing mode
+  zpg = $60  ; zero page
+  zpgx = $70 ; zero page, x 
+  zpgy = $80 ; zero page, y
 
   ; 2 byte arg
-  ind = $90
-  abs = $A0
-  absx = $B0
-  absy = $C0
+  ind = $90  ; (indirect), only used by jmp (indirect)
+  abs = $A0  ; absolute
+  absx = $B0 ; absolute, x
+  absy = $C0 ; absolute, y
 .endenum
 
 ; Letters used in the instruction names.
-; We can only support up to 16 of each,
-; so that they can be referenced with
-; 4 bits. These are the values we want in the
-; sets, where x indicates that we don't care.
+; Checking all of the instruction names, these
+; are the letters that can appear in each position
+; of the name (with some exceptions).
+;
 ; FirstLetter:  .byte "ABCDEIJLNOPRSTxx"
 ; SecondLetter: .byte "ABCDEHILMNOPRSTV"
 ; ThirdLetter:  .byte "ACDEIKLPQRSTVXYx"
@@ -84,6 +95,7 @@ ThirdLetter:
 .endenum
 
 ; Enum for second letter in an instruction
+; (Store in high nybble)
 .enum l2
   H = $00
   M = $10
@@ -310,7 +322,8 @@ ParseInstruction:
   rts
 @noTail:
   ; The three bytes bytes on the stack represent the letter indices,
-  ; and the mode is either implied, relative, or absolute.
+  ; and the mode is either implied, relative, or absolute (these modes
+  ; have no tail).
   dex
   lda #0
   sta Stack, x
@@ -703,5 +716,4 @@ Instructions_end:
 .byte l3::E|mode::impl,  l3::C|mode::zpgx,  l3::C|mode::zpgx
 .byte l3::D|mode::impl,  l3::C|mode::absy,  l3::E|mode::impl
 .byte l3::E|mode::impl,  l3::C|mode::absx,  l3::C|mode::absx
-
 

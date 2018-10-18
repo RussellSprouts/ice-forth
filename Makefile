@@ -2,17 +2,17 @@
 # Change these configs
 CC65=../cc65/bin
 MESEN=../emus/mesen/Mesen.exe
+LIT=../literate/lit
 
-S_FILES=note.s bootstrap.s neslib.s coroutines.s disassembler.s end.s
+S_FILES=note.s bootstrap.s coroutines.s disassembler.s end.s
 
-out/bootstrap.bin: $(S_FILES)
+out/bootstrap.bin: $(S_FILES) forth.inc
 	$(CC65)/ca65 --cpu 6502x -g note.s -o out/note.o
 	$(CC65)/ca65 --cpu 6502x -g bootstrap.s -o out/bootstrap.o
-	$(CC65)/ca65 --cpu 6502x -g neslib.s -o out/neslib.o
 	$(CC65)/ca65 --cpu 6502x -g coroutines.s -o out/coroutines.o
 	$(CC65)/ca65 --cpu 6502x -g disassembler.s -o out/disassembler.o
 	$(CC65)/ca65 --cpu 6502x -g end.s -o out/end.o
-	$(CC65)/ld65 --dbgfile out/debug.txt -C config out/note.o out/bootstrap.o out/neslib.o out/coroutines.o out/disassembler.o out/end.o -o out/bootstrap.bin
+	$(CC65)/ld65 --dbgfile out/debug.txt -C config out/note.o out/bootstrap.o out/coroutines.o out/disassembler.o out/end.o -o out/bootstrap.bin
 
 out/bootstrap.bin.h: out/bootstrap.bin
 	xxd -i out/bootstrap.bin out/bootstrap.bin.h
@@ -28,3 +28,6 @@ run: out/game.nes
 
 repl: out/bootstrap.bin bootstrap.f font.chr subroutines.f game.f out/6502
 	./out/6502 bootstrap.f -b font:font.chr subroutines.f game.f
+
+lit: lit/test.lit
+	$(LIT) lit/test.lit

@@ -76,45 +76,38 @@
 .endmacro
 
 ; The structure of a dictionary entry.
+;
+;  0                   1                   2
+;  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
+; +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+; |  $4C (jmp)    |          code pointer         |
+; +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+; |E|S| reserved  |I|H|N| length  | name...       |
+; +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+;
+; code ptr - the start of the implementation code
+; length - the length of the name, in bytes
+; E - this is the last entry in the dictionary
+; S - this is a single byte `val`
+; I - this is an immediate word
+; H - this word is hidden
+; N - always inline this word
+; name - the name, in ASCII
+;
 .struct DictEntry
   Jmp .byte
   CodePtr .word
   Flags2 .byte
-  ; The length of the name. Also includes the flags
   Len .byte
-  ; The entry name
   Name .byte
 .endstruct
 
-; The simulator treats $FF as a command to start
-; logging each instruction for debugging.
-.macro DEBUG_START
-  .byte $FF
-.endmacro
-
-; The simulator treats $EF as a command to stop
-; logging each instruction.
-.macro DEBUG_END
-  .byte $EF
-.endmacro
-
-; The simulator treats $DF as a command to print
-; out the next bytes until a zero character.
-.macro DEBUG_TRACE str
-   .byte $DF
-   .asciiz str
-.endmacro
-
-; New dictionary format, unifying xt and dictionary entry.
-; jmp DUP_IMPL
-; .byte flags2
-; .word IMMEDIATE | HIDDEN | LEN
-; .byte "DUP"
-; 
-; The dictionary entry length does not change - once it is created
-; with a name, it is fixed. However, we can update the jmp CODE_IMPL
-; instruction to change the location of the code implementation, allowing
-; code to relocate.
+; Defines a dictionary entry
+; dict - the dictionary segment to place the entry in
+; dict_code - the code segment to place the implementation in
+; name - the forth name of the word, as a string
+; flags - the dictionary flags
+; label - the label of the word to use in assembly code
 .macro defword_dict dict, dict_code, name, flags, label
   .segment dict
     label:
@@ -128,10 +121,12 @@
     .ident(.concat(.string(label), "_IMPL")):
 .endmacro
 
+; Defines a dictionary entry in the permanent dictionary
 .macro defword name, flags, label
   defword_dict "DICT", "DICT_CODE", name, flags, label
 .endmacro
 
+; Defines a dictionary entry in the temporary dictionary
 .macro defwordtmp name, flags, label
   defword_dict "TMP_DICT", "TMP_DICT_CODE", name, flags, label
 .endmacro
@@ -170,6 +165,9 @@
     rts
 .endmacro
 
+; A val is a word which pushes its value onto the
+; stack when executed, like constants, but stores the
+; value in RAM, allowing it to be changed.
 .macro defval name, init, label
   defword name, 0, label
     dex
@@ -184,6 +182,7 @@
     .word init
 .endmacro
 
+; A c-val is a `val` that only has values between 0 and 255.
 .macro defcval name, init, label
   defword name, F_SINGLE_BYTE, label
     dex
