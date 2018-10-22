@@ -1075,15 +1075,9 @@ defwordtmp "create", 0, CREATE
   jsr DHERE
   jsr STORE
 
-  ; Update LATEST to the new entry
-  ;jsr DHERE
-  ;jsr FETCH
-  ;jsr LATEST
-  ;jsr STORE
-
   ; ( stack is now string-ptr len )
   ; Store length in new entry
-  ; DUP DHERE Len + C!
+  ; dup dhere @ dict:len + c!
   jsr DUP
   jsr DHERE
   jsr FETCH
@@ -1092,7 +1086,7 @@ defwordtmp "create", 0, CREATE
   jsr CSTORE
 
   ; Write jmp CHERE to the dictionary entry.
-  ; JMP_OP dhere @ Jmp + c!
+  ; JMP_OP dhere @ dict:jmp + c!
   push #JMP_OP
   jsr DHERE
   jsr FETCH
@@ -2074,8 +2068,20 @@ void initOpcodes() {
   opcodes[0x08] = {"PHP", []{ push(GET_P()); }};
   opcodes[0x28] = {"PLP", []{ SET_P(pop()); }};
 
-  // nop
+  // official and unofficial nops
+  opcodes[0x1A] = {"NOP1A", []{ }};
+  opcodes[0x3A] = {"NOP3A", []{ }};
+  opcodes[0x5A] = {"NOP5A", []{ }};
+  opcodes[0x7A] = {"NOP7A", []{ }};
+  opcodes[0xDA] = {"NOPDA", []{ }};
   opcodes[0xEA] = {"NOP", []{ }};
+  opcodes[0xFA] = {"NOPFA", []{ }};
+
+  opcodes[0x80] = {"NOP80 #", []{ immediate(); }};
+  opcodes[0x82] = {"NOP82 #", []{ immediate(); }};
+  opcodes[0x89] = {"NOP89 #", []{ immediate(); }};
+  opcodes[0xC2] = {"NOPC2 #", []{ immediate(); }};
+  opcodes[0xE2] = {"NOPE2 #", []{ immediate(); }};
 
   // inc
   opcodes[0xE6] = {"INC", []{ INC(zeroPage()); }};
@@ -2210,6 +2216,7 @@ void initOpcodes() {
   opcodes[0xC4] = {"CPY", []{ CMP(m.y, read(zeroPage())); }};
   opcodes[0xCC] = {"CPY", []{ CMP(m.y, read(absolute())); }};
 
+  // Debugging opcodes (not used on real processors)
   opcodes[0xFF] = {"DBG_START", []{
     printf("DEBUGGER STARTED");
     trace = true;
@@ -3057,7 +3064,7 @@ Instruction:
 ; Illegal instructions are represented as
 ; EEE because E was already present as a possible
 ; letter in all three positions.
-; Each instruction with byte b is stored at
+; Each instruction with opcode b is stored at
 ; index b - floor(b/4). This is because we
 ; skip all instructions that end with the bits
 ; 11, which are all illegal.
@@ -4284,11 +4291,11 @@ Overall, the compiled code for a subroutine will look like this:
 ; sample compiled code for: { 1 } execute
 
   clv
-  bvc @skip ; bra
+  bvc @then ; bra
 subroutine:
   push #1
   rts
-@skip:
+@then:
   push #subroutine
   jsr EXECUTE
 ---

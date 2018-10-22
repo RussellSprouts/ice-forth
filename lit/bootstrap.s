@@ -781,15 +781,9 @@ defwordtmp "create", 0, CREATE
   jsr DHERE
   jsr STORE
 
-  ; Update LATEST to the new entry
-  ;jsr DHERE
-  ;jsr FETCH
-  ;jsr LATEST
-  ;jsr STORE
-
   ; ( stack is now string-ptr len )
   ; Store length in new entry
-  ; DUP DHERE Len + C!
+  ; dup dhere @ dict:len + c!
   jsr DUP
   jsr DHERE
   jsr FETCH
@@ -798,7 +792,7 @@ defwordtmp "create", 0, CREATE
   jsr CSTORE
 
   ; Write jmp CHERE to the dictionary entry.
-  ; JMP_OP dhere @ Jmp + c!
+  ; JMP_OP dhere @ dict:jmp + c!
   push #JMP_OP
   jsr DHERE
   jsr FETCH
@@ -2587,7 +2581,7 @@ Instruction:
 ; Illegal instructions are represented as
 ; EEE because E was already present as a possible
 ; letter in all three positions.
-; Each instruction with byte b is stored at
+; Each instruction with opcode b is stored at
 ; index b - floor(b/4). This is because we
 ; skip all instructions that end with the bits
 ; 11, which are all illegal.

@@ -319,8 +319,20 @@ void initOpcodes() {
   opcodes[0x08] = {"PHP", []{ push(GET_P()); }};
   opcodes[0x28] = {"PLP", []{ SET_P(pop()); }};
 
-  // nop
+  // official and unofficial nops
+  opcodes[0x1A] = {"NOP1A", []{ }};
+  opcodes[0x3A] = {"NOP3A", []{ }};
+  opcodes[0x5A] = {"NOP5A", []{ }};
+  opcodes[0x7A] = {"NOP7A", []{ }};
+  opcodes[0xDA] = {"NOPDA", []{ }};
   opcodes[0xEA] = {"NOP", []{ }};
+  opcodes[0xFA] = {"NOPFA", []{ }};
+
+  opcodes[0x80] = {"NOP80 #", []{ immediate(); }};
+  opcodes[0x82] = {"NOP82 #", []{ immediate(); }};
+  opcodes[0x89] = {"NOP89 #", []{ immediate(); }};
+  opcodes[0xC2] = {"NOPC2 #", []{ immediate(); }};
+  opcodes[0xE2] = {"NOPE2 #", []{ immediate(); }};
 
   // inc
   opcodes[0xE6] = {"INC", []{ INC(zeroPage()); }};
@@ -455,6 +467,7 @@ void initOpcodes() {
   opcodes[0xC4] = {"CPY", []{ CMP(m.y, read(zeroPage())); }};
   opcodes[0xCC] = {"CPY", []{ CMP(m.y, read(absolute())); }};
 
+  // Debugging opcodes (not used on real processors)
   opcodes[0xFF] = {"DBG_START", []{
     printf("DEBUGGER STARTED");
     trace = true;
