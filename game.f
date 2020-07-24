@@ -18,7 +18,7 @@ bally val oldbally
 
 ( x y -- )
 : draw| 
-  [ char | bl - literal ]
+  [ char | literal ]
   0
   spr oam-spr to spr ;
 
@@ -30,11 +30,10 @@ bally val oldbally
 
 ( x y -- )
 : draw-ball
-  [ char . bl - literal ] 0 spr oam-spr to spr 
+  [ char . literal ] 0 spr oam-spr to spr 
 ;
 
 : frame
-    \ colors 1+ 7 and to colors
     0 to spr
 
     joy1 btnU and if
@@ -90,19 +89,19 @@ bally val oldbally
 ;
 
 : init
-  font 0000 mv>ppu
-  font 1000 mv>ppu
+  font 200 mv>ppu
+  font 1200 mv>ppu
   19 to vppu-mask
 ;
 
 : done
   freeze \ stop emulation and write NES ROM
   wait-for-ppu
-  \ Disable rendering
+  \ Disable all rendering
   [ 0 LDA.#
     2000 STA ]
   init
-  \ Enable NMIs
+  \ Enable frame interrupts
   [ 80 LDA.#
     2000 STA ]
   \ Loop forever and call the frame function each frame
@@ -117,4 +116,4 @@ bally val oldbally
 2 30 pal-col!
 3 31 pal-col!
 4 pal-bright
-80 to vppu-ctrl
+80 to vppu-ctrl 

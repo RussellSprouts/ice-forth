@@ -5,7 +5,11 @@
 </head>
 <body style="background-color: #fdd">
   <textarea style="float:left;width:20%;height:768px;" readonly id="text"></textarea>
-  <canvas style="float:right" id="c" width=768 height=768></canvas>
+  <div style="float:right;position:relative;width:768px;height:768px;">
+    <canvas style="position:absolute;top:0;left:0" id="c" width=768 height=768></canvas>
+    <canvas style="position:absolute;top:0;left:0;opacity:25%" id="c-overlay" width=768 height=768></canvas>
+
+  </div>
   <hr style="clear:both"/>
   <label>Choose bootstrap.bin and ops.out
   <input type="file" id="files" multiple />
@@ -15,20 +19,34 @@
     let c = document.getElementById('c');
     let ctx = c.getContext('2d');
 
+    let overlay = document.getElementById('c-overlay');
+    let overlay_ctx = overlay.getContext('2d');
+
     function setPixel(x, y, c) {
       ctx.fillStyle = c;
       ctx.fillRect(x*3, y*3, 3, 3);
     }
 
+    overlay_ctx.fillStyle = 'red';
+    overlay_ctx.fillRect(0, 0, 256*3, 0x8*3);
+    overlay_ctx.fillStyle = 'gray';
+    overlay_ctx.fillRect(0, 8*3, 256*3, (0x40-8) * 3);
+
+    overlay_ctx.fillStyle = 'blue';
+    overlay_ctx.fillRect(0, 0x40*3, 256*3, 0x20*3);
+
+    overlay_ctx.fillStyle = 'red';
+    overlay_ctx.fillRect(0, 0x60*3, 256*3, 0x20*3);
+
     let memoryState, ops;
 
-    function byte2Color(b) {
-      let shade = Math.floor(b / 16).toString(16);
-      return '#' + shade + shade + shade;
+    function byte2Color(byte) {
+      const val = Math.floor(byte / 16).toString(16);
+      return '#' + val + val + val;
     }
   
     let op = 0;
-    let ops_per_frame = 1024;
+    let ops_per_frame = 4096;
     let chars_per_frame = 16;
     let source = "";
     let textarea = document.getElementById('text');

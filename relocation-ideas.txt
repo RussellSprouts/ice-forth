@@ -1,0 +1,4 @@
+
+1. Inline - use different NOP instructions to mark code for relocation.
+   The dictionary defines the start and end points of each word, and
+   markers define places where relocation needs to happen.

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
+  <link rel="stylesheet" data-name="vs/editor/editor.main" href="node_modules/monaco-editor/min/vs/editor/editor.main.css">
+</head>
+<body>
+
+<h2>Monaco Editor Sync Loading Sample</h2>
+
+<pre>
+<code id="test" data-lang="text/javascript">
+var a = {};
+if <a href="#">(a)</a> {
+  console.log(a);
+}
+</code>
+</pre>
+
+<div id="container" style="width:800px;height:600px;border:1px solid grey"></div>
+
+<script>var require = { paths: { 'vs': 'node_modules/monaco-editor/min/vs' } };</script>
+<script src="node_modules/monaco-editor/min/vs/loader.js"></script>
+<script src="node_modules/monaco-editor/min/vs/editor/editor.main.nls.js"></script>
+<script src="node_modules/monaco-editor/min/vs/editor/editor.main.js"></script>
+
+<script>
+  window.addEventListener('load', function() {
+    Array.from(document.querySelectorAll('pre.prettyprint')).forEach((elt) => {
+      const text = elt.innerText;
+      const height = getComputedStyle(elt).height;
+      elt.style.height = (+height.substring(0, height.length - 2) * 19/16) + 'px';
+      elt.innerHTML = "";
+      var editor = monaco.editor.create(elt, {
+        value: text,
+        language: 'text',
+        scrollBeyondLastLine: false,
+        readOnly: true,
+        lineNumbers: 'off'
+      });
+    });
+  });
+</script>
+
+</body>
+</html>

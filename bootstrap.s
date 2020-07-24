@@ -28,7 +28,7 @@
 .macpack generic
 .include "forth.inc"
 
-.import DICT_END
+.import DICT_END, TMP_DICT_END
 .import CHERE_PERM_INIT, CHERE_TMP_INIT
 .import VHERE_PERM_INIT, VHERE_TMP_INIT
 
@@ -53,11 +53,11 @@ F_SINGLE_BYTE = $4000
 .segment "DICT"
 ; Reserve space to push the dictionary to the end of the memory
 ; space, since it now grows down.
-.res $CE7
+.res $D13
 DHERE_PERM_INIT:
 
 .segment "TMP_DICT"
-.res $649
+.res $671
 DHERE_TMP_INIT:
 
 .segment "ZEROPAGE": zeropage
@@ -80,10 +80,6 @@ ControlFlowStackEnd:
 .segment "STACK"
 ; Reserve the hardware stack.
 RStack: .res $100
-
-defwordtmp "first-test", 0, FIRST_TEST
-  push 1234
-  rts
 
 defconsttmp "dict::impl", DictEntry::CodePtr, DictEntryCodePtr
 defconsttmp "dict::len", DictEntry::Len, DictEntryLen
@@ -574,7 +570,20 @@ defwordtmp "find", 0, FIND
 defwordtmp "rfind", 0, RFIND
   @LPointer := TMP1
 
-  jsr DHERE
+  push DHERE_PERM
+  jsr FETCH
+  jsr @rfind_impl
+  lda Stack, x
+  ora Stack+1, x
+  bne @found
+  pop
+  push DHERE_TMP
+  jsr FETCH
+  jsr @rfind_impl
+@found:
+  rts
+
+@rfind_impl:
   lda Stack, x
   sta @LPointer
   lda Stack+1, x

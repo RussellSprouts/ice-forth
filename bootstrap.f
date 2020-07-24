@@ -486,7 +486,6 @@
 
   \ Save branch instruction address
   : if immediate
-    \ [compile] debug
     POP
     stack 2- LDA.ZX
     stack 1- ORA.ZX
@@ -541,16 +540,7 @@
     chere @ - 2- BNE
   ;
 
-  : char
-    word
-    [
-      INX INX \ drop word length
-      stack    LDA.XI
-      stack    STA.ZX
-      0        LDA.#
-      stack 1+ STA.ZX
-    ]
-  ;
+  : char  word drop @ ;
 
   : '(' [ char ( ] literal ;
   : ')' [ char ) ] literal ;
@@ -868,6 +858,8 @@
     drop
     drop
   ;
+
+  : show-disas ' >impl disas ;
 
   : do immediate
     \ inline code to put the loop bound then 

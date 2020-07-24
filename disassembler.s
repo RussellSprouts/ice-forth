@@ -15,7 +15,7 @@
 
 .macpack generic
 .include "forth.inc"
-.import DUP, FETCH, CFETCH, INCR, SWAP, DOT, DODOTQUOTE, RFIND
+.import DUP, FETCH, CFETCH, INCR, SWAP, DOT, DODOTQUOTE, RFIND, ASM
 .importzp Stack, TMP1, TMP2, TMP3, TMP4
 
 ; To save space, the 3 letters and addressing mode of the
@@ -134,7 +134,6 @@ ThirdLetter:
   X_
   Y_
 .endenum
-
 message: .byte "(.')", $0A, ".byte ", $22, $0
 
 ; Handles disassembly of DODOTQUOTE, which takes

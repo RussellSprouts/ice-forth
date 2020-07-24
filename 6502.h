@@ -6,6 +6,7 @@
 
 #define IO_PORT 0x401C
 #define MEMORY_SIZE (64*1024)
+#define TRACE_OPS 1
 
 typedef struct Machine {
   uint8_t a = 0;
@@ -28,6 +29,7 @@ typedef struct Machine {
 static Machine m;
 static bool trace;
 
+static FILE *opsFile;
 static std::string lastLineInput;
 static size_t lineIndex = 0;
 
@@ -46,8 +48,13 @@ static uint8_t nextChar() {
 
 static uint8_t read(uint16_t addr) {
   if (addr == IO_PORT) {
-    return nextChar();
+    const auto n = nextChar();
+    if (TRACE_OPS) {
+			fprintf(opsFile, "r\t%d\n", n);
+		}
+    return n;
   } else {
+
     return m.memory[addr];
   }
 }
@@ -56,6 +63,9 @@ static void set(uint16_t addr, uint8_t val) {
   if (addr == IO_PORT) {
     putchar(val);
   } else {
+		if (TRACE_OPS) {
+			fprintf(opsFile, "w\t%d\t%d\n", addr, val);
+		}
     m.memory[addr] = val;
   }
 }

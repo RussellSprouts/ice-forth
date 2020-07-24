@@ -20,6 +20,8 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+	opsFile = fopen("out/ops.out", "w+");
+
   for (int i = 1; i < argc; i++) {
     if (argv[i] == std::string("-b")) {
       std::string binary = argv[i+1];
@@ -54,6 +56,7 @@ int main(int argc, char **argv) {
 
   FILE *romout = fopen("out/game.nes", "w+");
   FILE *ramout = fopen("out/ram.out", "w+");
+
 
   fwrite("NES\x1A\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 1, 16, romout);
   fwrite(&m.memory[0x8000], 1, 0x8000, romout);

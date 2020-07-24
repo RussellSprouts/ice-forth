@@ -1168,23 +1168,6 @@ defword "c@1+", 0, FETCH_INC
   jsr SWAP
   jmp CFETCH 
 
-defwordtmp "see", 0, SEE
-  jmp Instruction
-
-defwordtmp "ins", 0, INS
-  jsr WORD
-  pop ; drop string length
-  copyTo TMP1
-  pop
-  jsr ParseInstruction
-  beq :+
-  jsr SWAP
-  jsr DUP
-  jsr DIV3
-  jsr ADD
-  jsr SWAP
-: rts
-
 defword "thaw", 0, THAW
   Source := TMP1
   Target := TMP3
@@ -2026,6 +2009,8 @@ palBrightTable8:
 
 .segment "TMP_CODE"
 
+ASSEMBLER_START:
+
 ; To save space, the 3 letters and addressing mode of the
 ; instruction are stored in 4-bits each.
 ; Turns out we can almost fit all of the letters with
@@ -2242,6 +2227,23 @@ PrintArg:
   
 @return:
   rts
+
+defwordtmp "ins", 0, INS
+  jsr WORD
+  pop ; drop string length
+  copyTo TMP1
+  pop
+  jsr ParseInstruction
+  beq :+
+  jsr SWAP
+  jsr DUP
+  jsr DIV3
+  jsr ADD
+  jsr SWAP
+: rts
+
+defwordtmp "see", 0, SEE
+  jmp Instruction
 
 ; A lookup table for the ascii values of the
 ; l1, l2, and l3 enums.
@@ -2719,6 +2721,8 @@ Instructions_end:
 .byte l3::E|mode::impl,  l3::C|mode::zpgx,  l3::C|mode::zpgx
 .byte l3::D|mode::impl,  l3::C|mode::absy,  l3::E|mode::impl
 .byte l3::E|mode::impl,  l3::C|mode::absx,  l3::C|mode::absx
+
+ASSEMBLER_END:
 
 
 ; How many coroutines to support
