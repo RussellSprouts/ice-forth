@@ -1,6 +1,6 @@
 # Ice Forth
 
-A Forth implementation self-hosted on the 6502, for creating NES cartridges.
+A Forth implementation self-hosted on the 6502, for creating NES roms.
 
 Compiling a cartridge has several stages.
 
@@ -10,7 +10,7 @@ Compiling a cartridge has several stages.
    interpreter with an integrated assembler. (This only takes up a few kb of the
    full 64).
 
-2. `6502.lua` loads `bootstrap.bin` into its memory, and emulates running the
+2. `6502.cpp` loads `bootstrap.bin` into its memory, and emulates running the
    interpreter on the NES processor, using a virtual cartridge with RAM everywhere.
    The emulator has the crucial addition of an IO port, which is used to input
    Forth code and get Forth output.
@@ -43,8 +43,7 @@ Compiling a cartridge has several stages.
 
 ## Running
 
-Edit `Makefile` with the path to your ca65 and ld65 executables.
-Ensure you have luajit installed.
+Edit `Makefile` with the path to your [ca65 and ld65](https://cc65.github.io) executables.
 
 ```
 $ make run
@@ -62,14 +61,14 @@ hex FF . decimal
 
 ```
 Welcome to Forth!
-\ Disassembler example
-' val >impl disas
+\ Disassembler the dup word
+show-disas dup
 ```
 
 ```
 Welcome to Forth!
 \ Defining new words
-: six 1 2 3 + + ;
+: six  1 2 3 + + ;
 ```
 
 ```
@@ -84,6 +83,8 @@ Welcome to Forth!
 ```
 
 Once you are ready to try the NES cartridge, use the word `done`.
+`out/game.nes` will contain the ROM file. See game.f for a sample
+of using the NES registers.
 
 ## Implementation details
 
@@ -119,7 +120,7 @@ entry pointers are the same.
 ### Subroutine threaded code
 
 The code is compiled to subrouting-threaded code with many inlined
-functions. Try `' val >impl disas` to the see the disassembly
+functions. Try `show-disas val` to the see the disassembly
 for the `val` word.
 
 ### Assembler/Disassembler
@@ -173,7 +174,7 @@ instruction. `[asm]` will handle the runtime semantics of the instruction.
 A simple emulator written in C++ is included. It is a very basic emulator,
 probably has bugs even in basic operations, and not all instructions are
 supported. (e.g. BRK and interrupts are unsupported). Like the NES, it doesn't
-include the
+include the decimal mode.
 
 To assist in debugging, these extra instructions are added:
 - `$FF` enters trace mode. In trace mode, each instruction is logged with info about the machine state.
