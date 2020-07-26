@@ -46,7 +46,7 @@ Compiling a ROM has several stages.
 Edit `Makefile` with the path to your [ca65 and ld65](https://cc65.github.io) executables.
 
 ```
-$ make run
+$ make repl
 ```
 
 Try some commands:
@@ -61,7 +61,7 @@ hex FF . decimal
 
 ```
 Welcome to Forth!
-\ Disassembler the dup word
+\ Disassemble the dup word
 show-disas dup
 ```
 
@@ -116,6 +116,12 @@ is relocated is to update the target of the jmp instruction.
 Since the same address is the entry point for the code and the
 start of the dictionary entry, execution tokens and dictionary
 entry pointers are the same.
+
+### Separate dictionaries
+
+Using the phrases `<tmp> definitions:` and `<perm> definitions:`, you can switch
+between defining words in the temporary space or permanent space. The temporary
+space will not be present in the final ROM.
 
 ### Subroutine threaded code
 
@@ -194,3 +200,7 @@ The emulator exits cleanly when executing `jmp 0`. On exit, the emulator writes 
   Using `visualize-ops.html`, you can see an animation of the Forth compiler working. It shows
   a 256x256 grid representing each byte as a single square, as well as each character that is read
   from the IO port.
+
+### Future work
+
+There's a lot of code defined in the assembly files. Ideally, most of it should be moved to .f files, leaving just the minimal core in assembly.
