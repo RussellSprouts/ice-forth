@@ -1,8 +1,8 @@
 # Ice Forth
 
-A Forth implementation self-hosted on the 6502, for creating NES roms.
+A Forth implementation self-hosted on the 6502, for creating NES ROMs.
 
-Compiling a cartridge has several stages.
+Compiling a ROM has several stages.
 
 1. The assembly code (.s files) are compiled into an initial cartridge
    `bootstrap.bin`. This is a 64kb file containing the full memory space at
